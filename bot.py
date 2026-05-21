@@ -856,6 +856,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif data == "doc_xray_labs":
         await query.message.reply_text(XRAY_LABS_TEXT, parse_mode="Markdown", disable_web_page_preview=True)
         return
+    elif data == "doc_pediatrics":
+        await query.message.reply_text(PEDIATRICS_TEXT, parse_mode="Markdown", disable_web_page_preview=True)
+        return
     elif data == "work_wood":
         await query.message.reply_text(WOOD_WORKERS_TEXT, parse_mode="Markdown", disable_web_page_preview=True)
         return
