@@ -539,6 +539,54 @@ SERVICES_KEYBOARD = ReplyKeyboardMarkup(
     resize_keyboard=True,
 )
 
+DOCTORS_MARKUP = InlineKeyboardMarkup([
+    [InlineKeyboardButton("طب وجراحة الفم والأسنان 🦷", callback_data="doc_dentist")],
+    [InlineKeyboardButton("العلاج الطبيعي والتغذية 🦾", callback_data="doc_physio")],
+    [InlineKeyboardButton("الباطنة والقلب والصدر 🫁", callback_data="doc_internal")],
+    [InlineKeyboardButton("أمراض النساء والتوليد 🤰", callback_data="doc_obgyn")],
+    [InlineKeyboardButton("الأنف والأذن والحنجرة 👂", callback_data="doc_ent")],
+    [InlineKeyboardButton("مخ وأعصاب وجراحة عامة 🧠", callback_data="doc_neuro_surgery")],
+    [InlineKeyboardButton("المسالك البولية والجلدية 🩸", callback_data="doc_uro_derma")],
+    [InlineKeyboardButton("مراكز الأشعة والتحاليل 🔬", callback_data="doc_xray_labs")],
+    [InlineKeyboardButton("طب الأطفال وحديثي الولادة 👶", callback_data="doc_pediatrics")],
+    [InlineKeyboardButton("عيادات الفتح التخصصية 🏛️", callback_data="alfath_clinics")]
+])
+
+WORKERS_MARKUP = InlineKeyboardMarkup([
+    [InlineKeyboardButton("أعمال الخشب والموبيليات 🪵", callback_data="work_wood")],
+    [InlineKeyboardButton("أعمال تشطيب الدهانات 🎨", callback_data="work_paint")],
+    [InlineKeyboardButton("تأسيس وتشطيب الكهرباء ⚡", callback_data="work_elec")],
+    [InlineKeyboardButton("تركيب السيراميك والبورسلين 🧱", callback_data="work_ceramic")]
+])
+
+BACK_DOCTORS_BTN = InlineKeyboardMarkup([
+    [InlineKeyboardButton("🔙 رجوع للتخصصات", callback_data="back_doctors")]
+])
+
+BACK_WORKERS_BTN = InlineKeyboardMarkup([
+    [InlineKeyboardButton("🔙 رجوع للصنايعية", callback_data="back_workers")]
+])
+
+DOC_TEXT_MAP = {
+    "doc_dentist":       DENTISTRY_TEXT,
+    "doc_physio":        PHYSIO_NUTRITION_TEXT,
+    "doc_internal":      INTERNAL_CARDIO_CHEST_TEXT,
+    "doc_obgyn":         OBSTETRICS_GYNECOLOGY_TEXT,
+    "doc_ent":           ENT_TEXT,
+    "doc_neuro_surgery": NEURO_SURGERY_TEXT,
+    "doc_uro_derma":     UROLOGY_DERMA_TEXT,
+    "doc_xray_labs":     XRAY_LABS_TEXT,
+    "doc_pediatrics":    PEDIATRICS_TEXT,
+    "alfath_clinics":    ALFATH_CLINICS_TEXT,
+}
+
+WORK_TEXT_MAP = {
+    "work_wood":    WOOD_WORKERS_TEXT,
+    "work_paint":   PAINT_WORKERS_TEXT,
+    "work_elec":    ELEC_WORKERS_TEXT,
+    "work_ceramic": CERAMIC_WORKERS_TEXT,
+}
+
 # ─── Logging ────────────────────────────────
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
@@ -605,19 +653,7 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return ConversationHandler.END
 
     if "دليل الأطباء" in text:
-        doctors_markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("طب وجراحة الفم والأسنان 🦷", callback_data="doc_dentist")],
-            [InlineKeyboardButton("العلاج الطبيعي والتغذية 🦾", callback_data="doc_physio")],
-            [InlineKeyboardButton("الباطنة والقلب والصدر 🫁", callback_data="doc_internal")],
-            [InlineKeyboardButton("أمراض النساء والتوليد 🤰", callback_data="doc_obgyn")],
-            [InlineKeyboardButton("الأنف والأذن والحنجرة 👂", callback_data="doc_ent")],
-            [InlineKeyboardButton("مخ وأعصاب وجراحة عامة 🧠", callback_data="doc_neuro_surgery")],
-            [InlineKeyboardButton("المسالك البولية والجلدية 🩸", callback_data="doc_uro_derma")],
-            [InlineKeyboardButton("مراكز الأشعة والتحاليل 🔬", callback_data="doc_xray_labs")],
-            [InlineKeyboardButton("طب الأطفال وحديثي الولادة 👶", callback_data="doc_pediatrics")],
-            [InlineKeyboardButton("عيادات الفتح التخصصية 🏛️", callback_data="alfath_clinics")]
-        ])
-        await update.message.reply_text(DOCTORS_TEXT, parse_mode="Markdown", reply_markup=doctors_markup, disable_web_page_preview=True)
+        await update.message.reply_text(DOCTORS_TEXT, parse_mode="Markdown", reply_markup=DOCTORS_MARKUP, disable_web_page_preview=True)
         return ConversationHandler.END
 
     if "مصمم البوت" in text:
@@ -681,13 +717,7 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return ConversationHandler.END
         
     elif "الصنايعية" in text:
-        workers_markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("أعمال الخشب والموبيليات 🪵", callback_data="work_wood")],
-            [InlineKeyboardButton("أعمال تشطيب الدهانات 🎨", callback_data="work_paint")],
-            [InlineKeyboardButton("تأسيس وتشطيب الكهرباء ⚡", callback_data="work_elec")],
-            [InlineKeyboardButton("تركيب السيراميك والبورسلين 🧱", callback_data="work_ceramic")]
-        ])
-        await update.message.reply_text(WORKERS_TEXT, parse_mode="Markdown", reply_markup=workers_markup, disable_web_page_preview=True)
+        await update.message.reply_text(WORKERS_TEXT, parse_mode="Markdown", reply_markup=WORKERS_MARKUP, disable_web_page_preview=True)
         return ConversationHandler.END
 
     elif "الشحن والتوصيل" in text:
@@ -829,47 +859,20 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     data = query.data
     
-    if data == "alfath_clinics":
-        await query.message.reply_text(ALFATH_CLINICS_TEXT, parse_mode="Markdown", disable_web_page_preview=True)
+    if data in DOC_TEXT_MAP:
+        await query.message.reply_text(DOC_TEXT_MAP[data], parse_mode="Markdown", reply_markup=BACK_DOCTORS_BTN, disable_web_page_preview=True)
         return
-    elif data == "doc_dentist":
-        await query.message.reply_text(DENTISTRY_TEXT, parse_mode="Markdown", disable_web_page_preview=True)
+
+    if data in WORK_TEXT_MAP:
+        await query.message.reply_text(WORK_TEXT_MAP[data], parse_mode="Markdown", reply_markup=BACK_WORKERS_BTN, disable_web_page_preview=True)
         return
-    elif data == "doc_physio":
-        await query.message.reply_text(PHYSIO_NUTRITION_TEXT, parse_mode="Markdown", disable_web_page_preview=True)
+
+    if data == "back_doctors":
+        await query.message.edit_text(DOCTORS_TEXT, parse_mode="Markdown", reply_markup=DOCTORS_MARKUP)
         return
-    elif data == "doc_internal":
-        await query.message.reply_text(INTERNAL_CARDIO_CHEST_TEXT, parse_mode="Markdown", disable_web_page_preview=True)
-        return
-    elif data == "doc_obgyn":
-        await query.message.reply_text(OBSTETRICS_GYNECOLOGY_TEXT, parse_mode="Markdown", disable_web_page_preview=True)
-        return
-    elif data == "doc_ent":
-        await query.message.reply_text(ENT_TEXT, parse_mode="Markdown", disable_web_page_preview=True)
-        return
-    elif data == "doc_neuro_surgery":
-        await query.message.reply_text(NEURO_SURGERY_TEXT, parse_mode="Markdown", disable_web_page_preview=True)
-        return
-    elif data == "doc_uro_derma":
-        await query.message.reply_text(UROLOGY_DERMA_TEXT, parse_mode="Markdown", disable_web_page_preview=True)
-        return
-    elif data == "doc_xray_labs":
-        await query.message.reply_text(XRAY_LABS_TEXT, parse_mode="Markdown", disable_web_page_preview=True)
-        return
-    elif data == "doc_pediatrics":
-        await query.message.reply_text(PEDIATRICS_TEXT, parse_mode="Markdown", disable_web_page_preview=True)
-        return
-    elif data == "work_wood":
-        await query.message.reply_text(WOOD_WORKERS_TEXT, parse_mode="Markdown", disable_web_page_preview=True)
-        return
-    elif data == "work_paint":
-        await query.message.reply_text(PAINT_WORKERS_TEXT, parse_mode="Markdown", disable_web_page_preview=True)
-        return
-    elif data == "work_elec":
-        await query.message.reply_text(ELEC_WORKERS_TEXT, parse_mode="Markdown", disable_web_page_preview=True)
-        return
-    elif data == "work_ceramic":
-        await query.message.reply_text(CERAMIC_WORKERS_TEXT, parse_mode="Markdown", disable_web_page_preview=True)
+
+    if data == "back_workers":
+        await query.message.edit_text(WORKERS_TEXT, parse_mode="Markdown", reply_markup=WORKERS_MARKUP)
         return
 
     admin_msg = query.message
