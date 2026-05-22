@@ -49,8 +49,8 @@ DOCTORS_TEXT = textwrap.dedent("""\
 
     ----------------------------------------
     🚨 *[ملاحظة هامة]:*
-    • 👨‍⚕️ د/ عبد الله نبيل الشوبكي (طوارئ 24 ساعة)
-      📞 هاتفياً: 01130396842 | 💬 واتساب: 01069431963
+    • 👨‍⚕️ د/ إبراهيم عاطف (طوارئ 24 ساعة)
+      📞 رقم الهاتف: +20 106 292 5584
     ----------------------------------------
     🤖 للبوت والخدمات: t.me/AlBalashon\\_services\\_bot""")
 
@@ -82,7 +82,9 @@ PHYSIO_NUTRITION_TEXT = textwrap.dedent("""\
       📝 التخصص: حالات الجراحة، الكسور، الجلطات، والمسنين.
       📞 أرقام التواصل: 01050915289 - 01113997889
 
-    • 👨‍⚕️ د/ يوسف محمد محمد (أخصائي العلاج الطبيعي - Physiotherapy)
+    • 👨‍⚕️ د/ يوسف محمد محمد
+      ✨ أخصائي العلاج الطبيعي
+      📝 التخصص: جلسات الحجامة المنزلية - التغذية العلاجية - والإصابات والتأهيل
       📞 أرقام التواصل: 01004567506 - 01016233543
 
     ----------------------------------------
@@ -274,11 +276,9 @@ EMERGENCY_PHARMACY_INFO = textwrap.dedent("""\
     🤖 للبوت والخدمات: t.me/AlBalashon\\_services\\_bot""")
 
 EMERGENCY_DOCTOR_TEXT = textwrap.dedent("""\
-    🚨 *د/ عبد الله نبيل (طبيب طوارئ 24 ساعة)*
+    🚨 *د/ إبراهيم عاطف (طبيب طوارئ 24 ساعة)*
 
-    • أرقام التواصل الفوري:
-    📞 اتصال مباشر: 01130396842
-    💬 واتساب: 01069431963""")
+    📞 رقم الهاتف: +20 106 292 5584""")
 
 EVENING_AZKAR_TEXT = textwrap.dedent("""\
     أَعُوذُ بِاللهِ مِنْ الشَّيْطَانِ الرَّجِيمِ
@@ -711,7 +711,7 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return ConversationHandler.END
 
     elif "طبيب طوارئ" in text:
-        contact_keyboard = [[InlineKeyboardButton("💬 تواصل طوارئ (واتساب)", url="https://wa.me/201069431963")]]
+        contact_keyboard = [[InlineKeyboardButton("💬 تواصل طوارئ (واتساب)", url="https://wa.me/201062925584")]]
         contact_markup = InlineKeyboardMarkup(contact_keyboard)
         await update.message.reply_text(EMERGENCY_DOCTOR_TEXT, parse_mode="Markdown", reply_markup=contact_markup)
         return ConversationHandler.END
