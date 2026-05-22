@@ -74,6 +74,12 @@ PHYSIO_NUTRITION_TEXT = textwrap.dedent("""\
     🦾 *[العلاج الطبيعي والتغذية]*
     ----------------------------------------
 
+    • 👨‍⚕️ د/ عبدالرحمن خالد عبدالرحمن الزفتاوي
+      📝 أخصائي العلاج الطبيعي، التغذية العلاجية، والحجامة الطبية
+      📍 العنوان: مركز د/ أمل - بجوار مكتبة وحيد.
+      📅 المواعيد: السبت، الإثنين، والأربعاء.
+      📞 رقم التواصل: 01091590054
+
     • 👨‍⚕️ د/ أحمد صقر (أخصائي العلاج الطبيعي، التغذية العلاجية، والحجامة الطبية)
       📍 العنوان: البلاشون - مركز بلبيس.
       📞 رقم التواصل: 01064348233
@@ -860,7 +866,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     data = query.data
     
     if data in DOC_TEXT_MAP:
-        await query.message.reply_text(DOC_TEXT_MAP[data], parse_mode="Markdown", reply_markup=BACK_DOCTORS_BTN, disable_web_page_preview=True)
+        markup = BACK_DOCTORS_BTN
+        if data == "doc_physio":
+            markup = InlineKeyboardMarkup([
+                [InlineKeyboardButton("💬 تواصل مباشر (واتساب)", url="https://wa.me/201091590054")],
+                [InlineKeyboardButton("🔙 رجوع للتخصصات", callback_data="back_doctors")]
+            ])
+        await query.message.reply_text(DOC_TEXT_MAP[data], parse_mode="Markdown", reply_markup=markup, disable_web_page_preview=True)
         return
 
     if data in WORK_TEXT_MAP:
