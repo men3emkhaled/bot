@@ -470,6 +470,9 @@ ELEC_WORKERS_TEXT = textwrap.dedent("""\
     ⚡ *[تأسيس وتشطيب الكهرباء]*
     ----------------------------------------
 
+    • ⚡ عبدالله ممدوح
+      📞 رقم التواصل: 01272807797
+
     • ⚡ مصطفى حسين
       📞 رقم التواصل: 01010718608
 
@@ -533,6 +536,19 @@ CHARITY_TEXT = textwrap.dedent("""\
     ----------------------------------------
     🤖 للبوت والخدمات: t.me/AlBalashon\\_services\\_bot""")
 
+EMERGENCY_CARS_TEXT = textwrap.dedent("""\
+    🚗 *[سيارات الطوارئ والمشاوير بالبلاشون]*
+    ----------------------------------------
+
+    • 🚗 الكابتن: حسن سامي (من البلاشون)
+      ⚙️ السيارة: ملاكي ميتسوبيشي لانسر
+      📍 العنوان: البلاشون - شارع الموقف
+      📞 رقم التواصل: 01062398885
+      ℹ️ الخدمة: مشاوير خاصة وحالات طارئة (24 ساعة)
+
+    ----------------------------------------
+    🤖 للبوت والخدمات: t.me/AlBalashon\\_services\\_bot""")
+
 # ─── لوحات المفاتيح ──────────────────────────
 MAIN_KEYBOARD = ReplyKeyboardMarkup(
     [
@@ -549,7 +565,7 @@ URGENT_KEYBOARD = ReplyKeyboardMarkup(
     [
         ["طلب استغاثة", "🚨 طبيب طوارئ (24 ساعة)"],
         ["🏥 صيدليات الطوارئ الليلة", "🩸 التبرع بالدم والطوارئ"],
-        ["🔙 رجوع للقائمة الرئيسية"]
+        ["🚗 سيارات الطوارئ والمشاوير", "🔙 رجوع للقائمة الرئيسية"]
     ],
     resize_keyboard=True,
 )
@@ -824,6 +840,12 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         contact_markup = InlineKeyboardMarkup(contact_keyboard)
         await update.message.reply_text(EMERGENCY_DOCTOR_TEXT, parse_mode="Markdown", reply_markup=contact_markup)
         return ConversationHandler.END
+
+    elif "سيارات" in text or "سيارة" in text:
+        contact_keyboard = [[InlineKeyboardButton("تواصل عبر واتساب 💬", url="https://wa.me/201062398885")]]
+        contact_markup = InlineKeyboardMarkup(contact_keyboard)
+        await update.message.reply_text(EMERGENCY_CARS_TEXT, parse_mode="Markdown", reply_markup=contact_markup)
+        return ConversationHandler.END
         
     elif "الصنايعية" in text:
         await update.message.reply_text(WORKERS_TEXT, parse_mode="Markdown", reply_markup=WORKERS_MARKUP, disable_web_page_preview=True)
@@ -900,7 +922,8 @@ async def process_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
              "مكتب السعد للمحاسبة والمراجعة ⚖️", "مكتب السعد", "الجمعية الشرعية 🏛️",
              "🛺 اطلب توك توك", "💻 مصمم البوت", "🔙 رجوع للقائمة الرئيسية", 
              "🚕 مشاركة المشاوير", "🛠 الخدمات", "🍔 مطاعم", "🏟️ حجز ملعب البلاشون",
-             "مكتبة الوفاء", "دليل الصنايعية", "الجمعية الشرعية", "شكاوى", "مفقودات"]
+             "مكتبة الوفاء", "دليل الصنايعية", "الجمعية الشرعية", "شكاوى", "مفقودات",
+             "🚗 سيارات الطوارئ والمشاوير"]
              
     if user_text in KNOWN:
         context.user_data.clear()
