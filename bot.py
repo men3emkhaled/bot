@@ -527,7 +527,7 @@ MAIN_KEYBOARD = ReplyKeyboardMarkup(
 
 URGENT_KEYBOARD = ReplyKeyboardMarkup(
     [
-        ["🤝 طلب مساعدة", "🚨 طبيب طوارئ (24 ساعة)"],
+        ["طلب استغاثة", "🚨 طبيب طوارئ (24 ساعة)"],
         ["🏥 صيدليات الطوارئ الليلة", "🩸 التبرع بالدم والطوارئ"],
         ["🔙 رجوع للقائمة الرئيسية"]
     ],
@@ -536,10 +536,10 @@ URGENT_KEYBOARD = ReplyKeyboardMarkup(
 
 SERVICES_KEYBOARD = ReplyKeyboardMarkup(
     [
-        ["🏟️ حجز ملعب البلاشون", "🍔 مطاعم"],
-        ["دليل الصنايعية 🛠️", "📦 خدمات الشحن والتوصيل (الطيارين)"],
-        ["🪟 معرض استار ميتال للألوميتال", "مكتبة الوفاء 📚"],
-        ["مكتب السعد للمحاسبة والمراجعة ⚖️"],
+        ["🤝 طلب مساعدة", "🏟️ حجز ملعب البلاشون"],
+        ["🍔 مطاعم", "دليل الصنايعية 🛠️"],
+        ["📦 خدمات الشحن والتوصيل (الطيارين)", "🪟 معرض استار ميتال للألوميتال"],
+        ["مكتبة الوفاء 📚", "مكتب السعد للمحاسبة والمراجعة ⚖️"],
         ["🔙 رجوع للقائمة الرئيسية"]
     ],
     resize_keyboard=True,
@@ -817,8 +817,12 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         await update.message.reply_text("💼 اكتب تفاصيل الوظيفة (التخصص، المرتب، رقم التواصل):")
         return WAITING_FOR_REQUEST_DETAILS
 
+    elif "طلب استغاثة" in text:
+        await update.message.reply_text("اكتب تفاصيل الاستغاثة العاجلة ورقم التواصل:")
+        return WAITING_FOR_REQUEST_DETAILS
+
     elif "طلب مساعدة" in text:
-        await update.message.reply_text("🚨 اكتب تفاصيل طلب المساعدة أو الاستغاثة ورقم التواصل:")
+        await update.message.reply_text("اكتب تفاصيل طلب المساعدة ورقم التواصل:")
         return WAITING_FOR_REQUEST_DETAILS
 
     elif "شكاوى" in text or "مقترح" in text:
@@ -864,7 +868,7 @@ async def process_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return ConversationHandler.END
 
     KNOWN = ["🚨 حالات عاجلة", "🏥 صيدليات الطوارئ الليلة", "🩸 التبرع بالدم والطوارئ",
-             "🤝 طلب مساعدة", "🚨 طبيب طوارئ (24 ساعة)", "self care ✨", 
+             "🤝 طلب مساعدة", "طلب استغاثة", "🚨 طبيب طوارئ (24 ساعة)", "self care ✨", 
              "🚕 مشاركة المشاوير والمواصلات", "💼 وظائف خالية", "🛠️ الخدمات", 
              "🩺 دليل الأطباء والعيادات", "🪟 معرض استار ميتال للألوميتال",
              "📦 خدمات الشحن والتوصيل (الطيارين)", "مكتبة الوفاء 📚", "دليل الصنايعية 🛠️",
@@ -886,9 +890,12 @@ async def process_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         action_code = ""
         action_name = ""
         
-        if "طلب مساعدة" in choice:
+        if "طلب استغاثة" in choice:
             action_code = "sos"
-            action_name = "طلب مساعدة / استغاثة"
+            action_name = "طلب استغاثة عاجل"
+        elif "طلب مساعدة" in choice:
+            action_code = "help"
+            action_name = "طلب مساعدة"
         elif "شكاوى" in choice or "مقترح" in choice:
             action_code = "complaint"
             action_name = "شكوى / مقترح"
@@ -1030,6 +1037,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if action == "sos":
             markup = InlineKeyboardMarkup([[InlineKeyboardButton("تواصل مع الحالة 🚨", url=contact_url)]])
             text_to_send = f"🚨 *استغاثة عاجلة*\n\n{details}\n\n🤖 للتواصل عبر البوت: t.me/AlBalashon\\_services\\_bot"
+        elif action == "help":
+            markup = InlineKeyboardMarkup([[InlineKeyboardButton("تواصل لتقديم المساعدة", url=contact_url)]])
+            text_to_send = f"طلب مساعدة\n\n{details}\n\n🤖 للتواصل عبر البوت: t.me/AlBalashon\\_services\\_bot"
         elif action == "blood":
             markup = InlineKeyboardMarkup([[InlineKeyboardButton("تواصل مع حالة الطوارئ 🩸", url=contact_url)]])
             text_to_send = f"🚨 *نداء طوارئ عاجل - تبرع بالدم* 🚨\n\n{details}\n\n🤖 للتواصل عبر البوت: t.me/AlBalashon\\_services\\_bot"
