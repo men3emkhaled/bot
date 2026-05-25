@@ -605,15 +605,41 @@ logger = logging.getLogger(__name__)
 # ════════════════════════════════════════════
 def init_db():
     conn = sqlite3.connect(DB_PATH)
-    conn.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY)")
+    conn.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, joined_at TEXT, last_seen TEXT)")
+    
+    # ترقية قاعدة البيانات الحالية بشكل آمن
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(users)")
+    columns = [row[1] for row in cursor.fetchall()]
+    if "joined_at" not in columns:
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN joined_at TEXT")
+        except Exception as e:
+            logger.error(f"Error adding joined_at: {e}")
+    if "last_seen" not in columns:
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN last_seen TEXT")
+        except Exception as e:
+            logger.error(f"Error adding last_seen: {e}")
+            
+    conn.commit()
+    conn.close()
+
+def update_activity(user_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    today = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=3))).date().isoformat()
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_id FROM users WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
+    if row:
+        conn.execute("UPDATE users SET last_seen = ? WHERE user_id = ?", (today, user_id))
+    else:
+        conn.execute("INSERT INTO users (user_id, joined_at, last_seen) VALUES (?, ?, ?)", (user_id, today, today))
     conn.commit()
     conn.close()
 
 def register_user(user_id: int):
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))
-    conn.commit()
-    conn.close()
+    update_activity(user_id)
 
 def get_all_user_ids() -> list:
     conn = sqlite3.connect(DB_PATH)
@@ -627,11 +653,58 @@ def get_user_count() -> int:
     conn.close()
     return count
 
+def get_stats_data() -> dict:
+    conn = sqlite3.connect(DB_PATH)
+    today = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=3))).date().isoformat()
+    total = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    active_today = conn.execute("SELECT COUNT(*) FROM users WHERE last_seen = ?", (today,)).fetchone()[0]
+    new_today = conn.execute("SELECT COUNT(*) FROM users WHERE joined_at = ?", (today,)).fetchone()[0]
+    conn.close()
+    return {
+        "total": total,
+        "active_today": active_today,
+        "new_today": new_today
+    }
+
+# ════════════════════════════════════════════
+#  التحقق من الاشتراك في القناة
+# ════════════════════════════════════════════
+async def check_subscription(user_id: int, bot) -> bool:
+    if user_id in ADMINS:
+        update_activity(user_id)
+        return True
+    try:
+        member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
+        if member.status in ["creator", "administrator", "member"]:
+            update_activity(user_id)
+            return True
+    except Exception as e:
+        logger.error(f"Error checking membership for {user_id}: {e}")
+    return False
+
+async def prompt_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    channel_url = f"https://t.me/{CHANNEL_ID.lstrip('@')}"
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("الانضمام للقناة", url=channel_url)],
+        [InlineKeyboardButton("تحقق من الانضمام", callback_data="check_sub")]
+    ])
+    msg_text = (
+        "عذراً، يجب عليك الاشتراك في القناة أولاً لتتمكن من استخدام البوت.\n\n"
+        "اشترك في القناة من الزر بالأسفل ثم اضغط على تحقق من الانضمام."
+    )
+    if update.callback_query:
+        await update.callback_query.message.reply_text(msg_text, reply_markup=keyboard)
+    else:
+        await update.message.reply_text(msg_text, reply_markup=keyboard)
+
 # ════════════════════════════════════════════
 #  /start
 # ════════════════════════════════════════════
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.effective_user.id
+    if not await check_subscription(user_id, context.bot):
+        await prompt_subscription(update, context)
+        return ConversationHandler.END
     register_user(user_id)
     await update.message.reply_text(
         "💡 مرحباً بك في منصة خدمات البلاشون الذكية.\nاختر الخدمة المطلوبة من الأزرار بالأسفل:",
@@ -643,6 +716,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 #  معالج اختيارات القوائم
 # ════════════════════════════════════════════
 async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user_id = update.effective_user.id
+    if not await check_subscription(user_id, context.bot):
+        await prompt_subscription(update, context)
+        return ConversationHandler.END
+
     text = update.message.text
     context.user_data["choice"] = text
 
@@ -772,6 +850,11 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 #  معالج النص المُدخَل (نظام المراجعة الشامل)
 # ════════════════════════════════════════════
 async def process_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user_id = update.effective_user.id
+    if not await check_subscription(user_id, context.bot):
+        await prompt_subscription(update, context)
+        return ConversationHandler.END
+
     user_text = update.message.text or update.message.caption or ""
     photo_file_id = update.message.photo[-1].file_id if update.message.photo else None
     
@@ -864,6 +947,36 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await query.answer()
     
     data = query.data
+    user_id = update.effective_user.id
+
+    if data == "check_sub":
+        subscribed = await check_subscription(user_id, context.bot)
+        if subscribed:
+            try:
+                await query.delete_message()
+            except Exception:
+                pass
+            register_user(user_id)
+            await query.message.reply_text(
+                "💡 مرحباً بك في منصة خدمات البلاشون الذكية.\nاختر الخدمة المطلوبة من الأزرار بالأسفل:",
+                reply_markup=MAIN_KEYBOARD,
+            )
+        else:
+            channel_url = f"https://t.me/{CHANNEL_ID.lstrip('@')}"
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("الانضمام للقناة", url=channel_url)],
+                [InlineKeyboardButton("تحقق من الانضمام", callback_data="check_sub")]
+            ])
+            await query.message.reply_text(
+                "لم نتمكن من التحقق من انضمامك للقناة بعد. يرجى الاشتراك أولاً ثم الضغط على الزر.",
+                reply_markup=keyboard
+            )
+        return
+
+    # Check subscription for other actions
+    if not await check_subscription(user_id, context.bot):
+        await prompt_subscription(update, context)
+        return
     
     if data in DOC_TEXT_MAP:
         markup = BACK_DOCTORS_BTN
@@ -952,8 +1065,28 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 # ════════════════════════════════════════════
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_user.id not in ADMINS: return
-    count = get_user_count()
-    await update.message.reply_text(f"📊 عدد المشتركين في البوت حالياً: {count} شخص.")
+    stats_data = get_stats_data()
+    msg = (
+        "إحصائيات البوت:\n\n"
+        f"المستخدمين الجدد اليوم: {stats_data['new_today']} مستخدم\n"
+        f"المستخدمين النشطين اليوم: {stats_data['active_today']} مستخدم\n"
+        f"إجمالي مستخدمي البوت: {stats_data['total']} مستخدم"
+    )
+    await update.message.reply_text(msg)
+
+async def send_daily_stats(context: ContextTypes.DEFAULT_TYPE):
+    stats_data = get_stats_data()
+    msg = (
+        "تقرير الإحصائيات اليومي للبوت:\n\n"
+        f"المستخدمين الجدد اليوم: {stats_data['new_today']} مستخدم\n"
+        f"المستخدمين النشطين اليوم: {stats_data['active_today']} مستخدم\n"
+        f"إجمالي مستخدمي البوت: {stats_data['total']} مستخدم"
+    )
+    for admin_id in ADMINS:
+        try:
+            await context.bot.send_message(chat_id=admin_id, text=msg)
+        except Exception as e:
+            logger.error(f"Error sending daily stats to admin {admin_id}: {e}")
 
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_user.id not in ADMINS: return
@@ -1032,6 +1165,9 @@ def main():
     
     t_evening = datetime.time(hour=20, minute=0, tzinfo=tz)
     app.job_queue.run_daily(send_daily_evening_azkar, time=t_evening)
+    
+    t_stats = datetime.time(hour=23, minute=59, tzinfo=tz)
+    app.job_queue.run_daily(send_daily_stats, time=t_stats)
 
     conv_handler = ConversationHandler(
         entry_points=[
