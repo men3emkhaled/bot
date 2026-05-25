@@ -25,7 +25,8 @@ from telegram.ext import (
 BOT_TOKEN  = os.getenv("BOT_TOKEN")
 ADMIN_ID   = int(os.getenv("ADMIN_ID",   "5481609181"))
 ADMIN_ID_2 = int(os.getenv("ADMIN_ID_2", "1049124970"))
-ADMINS     = [ADMIN_ID, ADMIN_ID_2]  # قائمة جميع الآدمنز لتوجيه الطلبات
+ADMIN_ID_3 = int(os.getenv("ADMIN_ID_3", "7986800995"))
+ADMINS     = [ADMIN_ID, ADMIN_ID_2, ADMIN_ID_3]  # قائمة جميع الآدمنز لتوجيه الطلبات
 CHANNEL_ID = os.getenv("CHANNEL_ID", "@AlBalashon_Channel")
 
 # ─── مسارات قواعد البيانات وحفظ الحالة ────────
@@ -943,20 +944,23 @@ async def process_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             ]])
             req = f"🚨 {action_name} جديد\nمن: {username}\n\nالتفاصيل:\n{user_text}"
             
-            for admin_id in [5481609181, 1049124970]:
+            admin_msgs = {}
+            for admin_id in ADMINS:
                 try:
-                    if photo_file_id: await context.bot.send_photo(chat_id=admin_id, photo=photo_file_id, caption=req, reply_markup=markup)
-                    else: await context.bot.send_message(chat_id=admin_id, text=req, reply_markup=markup)
+                    if photo_file_id: sent_msg = await context.bot.send_photo(chat_id=admin_id, photo=photo_file_id, caption=req, reply_markup=markup)
+                    else: sent_msg = await context.bot.send_message(chat_id=admin_id, text=req, reply_markup=markup)
+                    admin_msgs[str(admin_id)] = sent_msg.message_id
                 except Exception as e:
                     print(f"Error sending to admin {admin_id}: {e}")
-                    if admin_id == 1049124970:
+                    if admin_id != ADMIN_ID:
                         try:
                             await context.bot.send_message(
-                                chat_id=5481609181,
-                                text=f"⚠️ خطأ في الإرسال للآدمن الثاني:\n{str(e)}"
+                                chat_id=ADMIN_ID,
+                                text=f"⚠️ خطأ في الإرسال للآدمن {admin_id}:\n{str(e)}"
                             )
                         except Exception:
                             pass
+            context.bot_data[f"req_{action_code}_{user.id}"] = admin_msgs
             
             await update.message.reply_text("تم إرسال طلبك بنجاح إلى الإدارة وسنتواصل معك قريباً. ✅", reply_markup=MAIN_KEYBOARD)
         else:
@@ -1043,12 +1047,42 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     # --- الرفض الموحد ---
     if data.startswith("rej_"):
+        action = data.split("_")[1]
         user_id = data.split("_")[2]
+        key = f"req_{action}_{user_id}"
+        admin_msgs = context.bot_data.get(key, {})
+        
         try:
-            await context.bot.send_message(chat_id=user_id, text="❌ نعتذر، تم رفض طلب النشر من قبل الإدارة.")
-            if photo_file_id: await query.edit_message_caption(caption=f"{admin_msg_text}\n\n❌ **تم الرفض بواسطة {admin_user}.**", parse_mode="Markdown")
-            else: await query.edit_message_text(text=f"{admin_msg_text}\n\n❌ **تم الرفض بواسطة {admin_user}.**", parse_mode="Markdown")
-        except: pass
+            await context.bot.send_message(chat_id=int(user_id), text="❌ نعتذر، تم رفض طلب النشر من قبل الإدارة.")
+        except:
+            pass
+
+        if not admin_msgs:
+            try:
+                if photo_file_id: await query.edit_message_caption(caption=f"{admin_msg_text}\n\n❌ **تم الرفض بواسطة {admin_user}.**", parse_mode="Markdown")
+                else: await query.edit_message_text(text=f"{admin_msg_text}\n\n❌ **تم الرفض بواسطة {admin_user}.**", parse_mode="Markdown")
+            except: pass
+        else:
+            for adm_id_str, msg_id in admin_msgs.items():
+                try:
+                    if photo_file_id:
+                        await context.bot.edit_message_caption(
+                            chat_id=int(adm_id_str),
+                            message_id=msg_id,
+                            caption=f"{admin_msg_text}\n\n❌ **تم الرفض بواسطة {admin_user}.**",
+                            parse_mode="Markdown"
+                        )
+                    else:
+                        await context.bot.edit_message_text(
+                            chat_id=int(adm_id_str),
+                            message_id=msg_id,
+                            text=f"{admin_msg_text}\n\n❌ **تم الرفض بواسطة {admin_user}.**",
+                            parse_mode="Markdown"
+                        )
+                except Exception as e:
+                    logger.error(f"Error editing admin message for {adm_id_str}: {e}")
+        
+        context.bot_data.pop(key, None)
         return
 
     # --- الموافقة والنشر الموحد ---
@@ -1086,9 +1120,33 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 if markup: await context.bot.send_message(CHANNEL_ID, text=text_to_send, parse_mode="Markdown", reply_markup=markup)
                 else: await context.bot.send_message(CHANNEL_ID, text=text_to_send, parse_mode="Markdown")
             
-            await context.bot.send_message(chat_id=user_id, text="✅ تمت الموافقة على طلبك ونشره في القناة بنجاح!")
-            if photo_file_id: await query.edit_message_caption(caption=f"{admin_msg_text}\n\n✅ **نُشر بواسطة {admin_user}.**", parse_mode="Markdown")
-            else: await query.edit_message_text(text=f"{admin_msg_text}\n\n✅ **نُشر بواسطة {admin_user}.**", parse_mode="Markdown")
+            await context.bot.send_message(chat_id=int(user_id), text="✅ تمت الموافقة على طلبك ونشره في القناة بنجاح!")
+            
+            key = f"req_{action}_{user_id}"
+            admin_msgs = context.bot_data.get(key, {})
+            if not admin_msgs:
+                if photo_file_id: await query.edit_message_caption(caption=f"{admin_msg_text}\n\n✅ **نُشر بواسطة {admin_user}.**", parse_mode="Markdown")
+                else: await query.edit_message_text(text=f"{admin_msg_text}\n\n✅ **نُشر بواسطة {admin_user}.**", parse_mode="Markdown")
+            else:
+                for adm_id_str, msg_id in admin_msgs.items():
+                    try:
+                        if photo_file_id:
+                            await context.bot.edit_message_caption(
+                                chat_id=int(adm_id_str),
+                                message_id=msg_id,
+                                caption=f"{admin_msg_text}\n\n✅ **نُشر بواسطة {admin_user}.**",
+                                parse_mode="Markdown"
+                            )
+                        else:
+                            await context.bot.edit_message_text(
+                                chat_id=int(adm_id_str),
+                                message_id=msg_id,
+                                text=f"{admin_msg_text}\n\n✅ **نُشر بواسطة {admin_user}.**",
+                                parse_mode="Markdown"
+                            )
+                    except Exception as e:
+                        logger.error(f"Error editing admin message for {adm_id_str}: {e}")
+            context.bot_data.pop(key, None)
         except Exception as e:
             logger.error(e)
             if photo_file_id: await query.edit_message_caption(caption=f"{admin_msg_text}\n\n❌ **حدث خطأ أثناء النشر.**", parse_mode="Markdown")
