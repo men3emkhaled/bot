@@ -961,43 +961,12 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         context.user_data["choice"] = "إضافة طبيب"
         return WAITING_FOR_REQUEST_DETAILS
 
-    elif "إضافة صنايعي" in text and not any(c in text for c in ["نجار", "نقاش", "كهربائي", "مبلط", "غسالات"]):
+    elif "إضافة صنايعي" in text:
         await update.message.reply_text(
             "اختر الحرفة الخاصة بك من القائمة بالأسفل لتصنيفها بشكل صحيح داخل البوت:",
             reply_markup=ADD_WORKER_CRAFT_KEYBOARD
         )
         context.user_data["choice"] = "إضافة صنايعي"
-        return ConversationHandler.END
-
-    elif any(c in text for c in ["نجار", "نقاش", "كهربائي", "مبلط", "غسالات"]) and "إضافة" in context.user_data.get("choice", ""):
-        craft_key = "work_wood"
-        craft_name = "نجار"
-        if "نجار" in text:
-            craft_key = "work_wood"
-            craft_name = "نجار"
-        elif "نقاش" in text:
-            craft_key = "work_paint"
-            craft_name = "نقاش"
-        elif "كهربائي" in text:
-            craft_key = "work_elec"
-            craft_name = "كهربائي"
-        elif "مبلط" in text:
-            craft_key = "work_ceramic"
-            craft_name = "مبلط"
-        elif "غسالات" in text:
-            craft_key = "work_washing_machine"
-            craft_name = "صيانة غسالات"
-
-        context.user_data["temp_craft_key"] = craft_key
-        context.user_data["temp_craft_name"] = craft_name
-
-        await update.message.reply_text(
-            f"📝 يرجى إدخال بياناتك كـ ({craft_name}) في رسالة واحدة كالتالي:\n\n"
-            "1. الاسم:\n"
-            "2. رقم التواصل:\n\n"
-            "سيتم مراجعة طلبك وإضافته لقسم الصنايعية ونشره في القناة فور موافقة الإدارة. ✅"
-        )
-        context.user_data["choice"] = f"إضافة صنايعي: {craft_name}"
         return WAITING_FOR_REQUEST_DETAILS
 
     elif "إضافة براند" in text:
@@ -1107,8 +1076,7 @@ async def process_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
              "مكتبة الوفاء", "دليل الصنايعية", "الجمعية الشرعية", "شكاوى", "مفقودات",
              "🚗 سيارات الطوارئ والمشاوير", "براند 🏷️", "براند", "🔙 رجوع للخدمات",
              "إضافة شغلك ➕", "إضافة شغلك", "إضافة طبيب/عيادة 🩺",
-             "إضافة صنايعي 🛠️", "إضافة براند 🏷️", "إضافة مطعم 🍔", "إضافة كابتن توصيل 🛵",
-             "نجار 🪵", "نقاش 🎨", "كهربائي ⚡", "مبلط 🧱", "صيانة غسالات 🧼"]
+             "إضافة صنايعي 🛠️", "إضافة براند 🏷️", "إضافة مطعم 🍔", "إضافة كابتن توصيل 🛵"]
              
     if user_text in KNOWN:
         context.user_data.clear()
@@ -1117,6 +1085,45 @@ async def process_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     choice    = context.user_data.get("choice", "")
     user      = update.effective_user
     username  = f"@{user.username}" if user.username else str(user.id)
+
+    # ─── التحقق من مرحلة اختيار الحرفة أولاً ───
+    if choice == "إضافة صنايعي":
+        if any(c in user_text for c in ["نجار", "نقاش", "كهربائي", "مبلط", "غسالات"]):
+            craft_key = "work_wood"
+            craft_name = "نجار"
+            if "نجار" in user_text:
+                craft_key = "work_wood"
+                craft_name = "نجار"
+            elif "نقاش" in user_text:
+                craft_key = "work_paint"
+                craft_name = "نقاش"
+            elif "كهربائي" in user_text:
+                craft_key = "work_elec"
+                craft_name = "كهربائي"
+            elif "مبلط" in user_text:
+                craft_key = "work_ceramic"
+                craft_name = "مبلط"
+            elif "غسالات" in user_text:
+                craft_key = "work_washing_machine"
+                craft_name = "صيانة غسالات"
+
+            context.user_data["temp_craft_key"] = craft_key
+            context.user_data["temp_craft_name"] = craft_name
+            context.user_data["choice"] = f"إضافة صنايعي: {craft_name}"
+
+            await update.message.reply_text(
+                f"📝 يرجى إدخال بياناتك كـ ({craft_name}) في رسالة واحدة كالتالي:\n\n"
+                "1. الاسم:\n"
+                "2. رقم التواصل:\n\n"
+                "سيتم مراجعة طلبك وإضافته لقسم الصنايعية ونشره في القناة فور موافقة الإدارة. ✅"
+            )
+            return WAITING_FOR_REQUEST_DETAILS
+        else:
+            await update.message.reply_text(
+                "⚠️ عذراً، يرجى اختيار الحرفة الخاصة بك من القائمة بالأسفل أولاً لتصنيفها بشكل صحيح داخل البوت:",
+                reply_markup=ADD_WORKER_CRAFT_KEYBOARD
+            )
+            return WAITING_FOR_REQUEST_DETAILS
 
     try:
         # نظام طلبات النشر الموحد في القناة
