@@ -441,7 +441,7 @@ WORKERS_TEXT = textwrap.dedent("""\
     🤖 للبوت والخدمات: t.me/AlBalashon\\_services\\_bot""")
 
 WOOD_WORKERS_TEXT = textwrap.dedent("""\
-    🪵 *[أعمال الخشب والموبيليات]*
+    🪵 *[نجار]*
     ----------------------------------------
 
     • 🛠️ محمد كمال شديد
@@ -457,7 +457,7 @@ WOOD_WORKERS_TEXT = textwrap.dedent("""\
     🤖 للبوت والخدمات: t.me/AlBalashon\\_services\\_bot""")
 
 PAINT_WORKERS_TEXT = textwrap.dedent("""\
-    🎨 *[أعمال تشطيب الدهانات]*
+    🎨 *[نقاش]*
     ----------------------------------------
 
     • 🎨 حسن القربي
@@ -467,7 +467,7 @@ PAINT_WORKERS_TEXT = textwrap.dedent("""\
     🤖 للبوت والخدمات: t.me/AlBalashon\\_services\\_bot""")
 
 ELEC_WORKERS_TEXT = textwrap.dedent("""\
-    ⚡ *[تأسيس وتشطيب الكهرباء]*
+    ⚡ *[كهربائي]*
     ----------------------------------------
 
     • ⚡ عبدالله ممدوح
@@ -486,11 +486,21 @@ ELEC_WORKERS_TEXT = textwrap.dedent("""\
     🤖 للبوت والخدمات: t.me/AlBalashon\\_services\\_bot""")
 
 CERAMIC_WORKERS_TEXT = textwrap.dedent("""\
-    🧱 *[تركيب السيراميك والبورسلين]*
+    🧱 *[مبلط]*
     ----------------------------------------
 
     • 🧱 محمد قاسم
       📞 رقم التواصل: 01093000617
+
+    ----------------------------------------
+    🤖 للبوت والخدمات: t.me/AlBalashon\\_services\\_bot""")
+
+WASHING_MACHINE_WORKERS_TEXT = textwrap.dedent("""\
+    🧼 *[صيانة غسالات]*
+    ----------------------------------------
+
+    • 🛠️ وجيه علي منصور
+      📞 رقم التواصل: 01024085243
 
     ----------------------------------------
     🤖 للبوت والخدمات: t.me/AlBalashon\\_services\\_bot""")
@@ -549,10 +559,18 @@ EMERGENCY_CARS_TEXT = textwrap.dedent("""\
     ----------------------------------------
     🤖 للبوت والخدمات: t.me/AlBalashon\\_services\\_bot""")
 
+BRANDS_TEXT = textwrap.dedent("""\
+    🏷️ *دليل البراندات بالبلاشون:*
+
+    تصفح البراندات المتاحة من الأزرار بالأسفل، أو أضف البراند الخاص بك مجاناً!
+
+    ----------------------------------------
+    🤖 للبوت والخدمات: t.me/AlBalashon\\_services\\_bot""")
+
 # ─── لوحات المفاتيح ──────────────────────────
 MAIN_KEYBOARD = ReplyKeyboardMarkup(
     [
-        ["🚨 حالات عاجلة"],
+        ["🚨 حالات عاجلة", "إضافة شغلك ➕"],
         ["self care ✨", "🚕 مشاركة المشاوير والمواصلات"],
         ["💼 وظائف خالية", "🛠️ الخدمات"],
         ["🩺 دليل الأطباء والعيادات", "الجمعية الشرعية 🏛️"],
@@ -576,6 +594,24 @@ SERVICES_KEYBOARD = ReplyKeyboardMarkup(
         ["🍔 مطاعم", "دليل الصنايعية 🛠️"],
         ["📦 خدمات الشحن والتوصيل (الطيارين)", "🪟 معرض استار ميتال للألوميتال"],
         ["مكتبة الوفاء 📚", "مكتب السعد للمحاسبة والمراجعة ⚖️"],
+        ["براند 🏷️", "🔙 رجوع للقائمة الرئيسية"]
+    ],
+    resize_keyboard=True,
+)
+
+BRANDS_KEYBOARD = ReplyKeyboardMarkup(
+    [
+        ["self care ✨"],
+        ["🔙 رجوع للخدمات"]
+    ],
+    resize_keyboard=True,
+)
+
+ADD_WORK_KEYBOARD = ReplyKeyboardMarkup(
+    [
+        ["إضافة طبيب/عيادة 🩺", "إضافة صنايعي 🛠️"],
+        ["إضافة براند 🏷️", "إضافة مطعم 🍔"],
+        ["إضافة كابتن توصيل 🛵"],
         ["🔙 رجوع للقائمة الرئيسية"]
     ],
     resize_keyboard=True,
@@ -595,10 +631,11 @@ DOCTORS_MARKUP = InlineKeyboardMarkup([
 ])
 
 WORKERS_MARKUP = InlineKeyboardMarkup([
-    [InlineKeyboardButton("أعمال الخشب والموبيليات 🪵", callback_data="work_wood")],
-    [InlineKeyboardButton("أعمال تشطيب الدهانات 🎨", callback_data="work_paint")],
-    [InlineKeyboardButton("تأسيس وتشطيب الكهرباء ⚡", callback_data="work_elec")],
-    [InlineKeyboardButton("تركيب السيراميك والبورسلين 🧱", callback_data="work_ceramic")]
+    [InlineKeyboardButton("نجار 🪵", callback_data="work_wood")],
+    [InlineKeyboardButton("نقاش 🎨", callback_data="work_paint")],
+    [InlineKeyboardButton("كهربائي ⚡", callback_data="work_elec")],
+    [InlineKeyboardButton("مبلط 🧱", callback_data="work_ceramic")],
+    [InlineKeyboardButton("صيانة غسالات 🧼", callback_data="work_washing_machine")]
 ])
 
 BACK_DOCTORS_BTN = InlineKeyboardMarkup([
@@ -608,6 +645,8 @@ BACK_DOCTORS_BTN = InlineKeyboardMarkup([
 BACK_WORKERS_BTN = InlineKeyboardMarkup([
     [InlineKeyboardButton("🔙 رجوع للصنايعية", callback_data="back_workers")]
 ])
+
+# (تم إزالتها واستبدالها بلوحة أزرار الرد العادية)
 
 DOC_TEXT_MAP = {
     "doc_dentist":       DENTISTRY_TEXT,
@@ -623,10 +662,11 @@ DOC_TEXT_MAP = {
 }
 
 WORK_TEXT_MAP = {
-    "work_wood":    WOOD_WORKERS_TEXT,
-    "work_paint":   PAINT_WORKERS_TEXT,
-    "work_elec":    ELEC_WORKERS_TEXT,
-    "work_ceramic": CERAMIC_WORKERS_TEXT,
+    "work_wood":            WOOD_WORKERS_TEXT,
+    "work_paint":           PAINT_WORKERS_TEXT,
+    "work_elec":            ELEC_WORKERS_TEXT,
+    "work_ceramic":         CERAMIC_WORKERS_TEXT,
+    "work_washing_machine": WASHING_MACHINE_WORKERS_TEXT,
 }
 
 # ─── Logging ────────────────────────────────
@@ -760,6 +800,10 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     text = update.message.text
     context.user_data["choice"] = text
 
+    if "رجوع للخدمات" in text:
+        await update.message.reply_text("اختر الخدمة المطلوبة من القائمة:", reply_markup=SERVICES_KEYBOARD)
+        return ConversationHandler.END
+
     if "رجوع" in text:
         await update.message.reply_text("القائمة الرئيسية:", reply_markup=MAIN_KEYBOARD)
         return ConversationHandler.END
@@ -851,6 +895,75 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         await update.message.reply_text(WORKERS_TEXT, parse_mode="Markdown", reply_markup=WORKERS_MARKUP, disable_web_page_preview=True)
         return ConversationHandler.END
 
+    elif "براند" in text and not "إضافة" in text and not "رجوع" in text:
+        await update.message.reply_text(BRANDS_TEXT, parse_mode="Markdown", reply_markup=BRANDS_KEYBOARD)
+        return ConversationHandler.END
+
+    elif "إضافة شغلك" in text:
+        await update.message.reply_text(
+            "💼 *قسم إضافة عملك/شغلك:* \n\n"
+            "اختر القسم المناسب لعملك من القائمة بالأسفل لإرسال تفاصيله للإدارة:",
+            reply_markup=ADD_WORK_KEYBOARD,
+            parse_mode="Markdown"
+        )
+        return ConversationHandler.END
+
+    elif "إضافة طبيب/عيادة" in text:
+        await update.message.reply_text(
+            "📝 يرجى إدخال تفاصيل العيادة/الطبيب في رسالة واحدة كالتالي:\n\n"
+            "1. اسم الطبيب والتخصص:\n"
+            "2. العنوان بالتفصيل:\n"
+            "3. المواعيد:\n"
+            "4. رقم التواصل:\n\n"
+            "سيتم مراجعة طلبك ونشره في القناة فور موافقة الإدارة. ✅"
+        )
+        context.user_data["choice"] = "إضافة طبيب"
+        return WAITING_FOR_REQUEST_DETAILS
+
+    elif "إضافة صنايعي" in text:
+        await update.message.reply_text(
+            "📝 يرجى إدخال تفاصيل الحرفة الخاصة بك في رسالة واحدة كالتالي:\n\n"
+            "1. الاسم:\n"
+            "2. الحرفة (نجار، كهربائي، إلخ):\n"
+            "3. رقم التواصل:\n\n"
+            "سيتم مراجعة طلبك ونشره في القناة فور موافقة الإدارة. ✅"
+        )
+        context.user_data["choice"] = "إضافة صنايعي"
+        return WAITING_FOR_REQUEST_DETAILS
+
+    elif "إضافة براند" in text:
+        await update.message.reply_text(
+            "📝 يرجى إدخال تفاصيل البراند الخاص بك في رسالة واحدة كالتالي:\n\n"
+            "1. اسم البراند:\n"
+            "2. وصف البراند/المنتجات:\n"
+            "3. الرابط (قناة/موقع/واتساب):\n\n"
+            "سيتم مراجعة طلبك ونشره في القناة فور موافقة الإدارة. ✅"
+        )
+        context.user_data["choice"] = "إضافة براند"
+        return WAITING_FOR_REQUEST_DETAILS
+
+    elif "إضافة مطعم" in text:
+        await update.message.reply_text(
+            "📝 يرجى إدخال تفاصيل المطعم في رسالة واحدة كالتالي:\n\n"
+            "1. اسم المطعم:\n"
+            "2. نوع الأكل/الخدمات التي يقدمها:\n"
+            "3. العنوان ورقم التواصل:\n\n"
+            "سيتم مراجعة طلبك ونشره في القناة فور موافقة الإدارة. ✅"
+        )
+        context.user_data["choice"] = "إضافة مطعم"
+        return WAITING_FOR_REQUEST_DETAILS
+
+    elif "إضافة كابتن توصيل" in text:
+        await update.message.reply_text(
+            "📝 يرجى إدخال تفاصيل التوصيل في رسالة واحدة كالتالي:\n\n"
+            "1. الاسم:\n"
+            "2. وسيلة التوصيل (موتوسيكل، سيارة، إلخ):\n"
+            "3. رقم التواصل:\n\n"
+            "سيتم مراجعة طلبك ونشره في القناة فور موافقة الإدارة. ✅"
+        )
+        context.user_data["choice"] = "إضافة كابتن"
+        return WAITING_FOR_REQUEST_DETAILS
+
     elif "الشحن والتوصيل" in text:
         await update.message.reply_text(DELIVERY_TEXT, parse_mode="Markdown")
         return ConversationHandler.END
@@ -923,7 +1036,9 @@ async def process_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
              "🛺 اطلب توك توك", "💻 مصمم البوت", "🔙 رجوع للقائمة الرئيسية", 
              "🚕 مشاركة المشاوير", "🛠 الخدمات", "🍔 مطاعم", "🏟️ حجز ملعب البلاشون",
              "مكتبة الوفاء", "دليل الصنايعية", "الجمعية الشرعية", "شكاوى", "مفقودات",
-             "🚗 سيارات الطوارئ والمشاوير"]
+             "🚗 سيارات الطوارئ والمشاوير", "براند 🏷️", "براند", "🔙 رجوع للخدمات",
+             "إضافة شغلك ➕", "إضافة شغلك", "إضافة طبيب/عيادة 🩺",
+             "إضافة صنايعي 🛠️", "إضافة براند 🏷️", "إضافة مطعم 🍔", "إضافة كابتن توصيل 🛵"]
              
     if user_text in KNOWN:
         context.user_data.clear()
@@ -959,6 +1074,21 @@ async def process_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         elif "التبرع بالدم" in choice:
             action_code = "blood"
             action_name = "تبرع بالدم"
+        elif "إضافة طبيب" in choice:
+            action_code = "add_doctor"
+            action_name = "طلب إضافة طبيب/عيادة"
+        elif "إضافة صنايعي" in choice:
+            action_code = "add_worker"
+            action_name = "طلب إضافة صنايعي"
+        elif "إضافة براند" in choice:
+            action_code = "add_brand"
+            action_name = "طلب إضافة براند"
+        elif "إضافة مطعم" in choice:
+            action_code = "add_restaurant"
+            action_name = "طلب إضافة مطعم"
+        elif "إضافة كابتن" in choice:
+            action_code = "add_captain"
+            action_name = "طلب إضافة كابتن توصيل"
             
         if action_code:
             markup = InlineKeyboardMarkup([[
@@ -1132,6 +1262,21 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             text_to_send = f"📢 *مفقودات وأمانات*\n\n{details}\n\n🤖 للتواصل عبر البوت: t.me/AlBalashon\\_services\\_bot"
         elif action == "job":
             text_to_send = f"💼 *وظائف خالية*\n\n{details}\n\n🤖 للتواصل عبر البوت: t.me/AlBalashon\\_services\\_bot"
+        elif action == "add_doctor":
+            markup = InlineKeyboardMarkup([[InlineKeyboardButton("تواصل مع الطبيب/العيادة 📞", url=contact_url)]])
+            text_to_send = f"🩺 *طبيب/عيادة جديدة بالبلاشون*\n\n{details}\n\n🤖 للتواصل عبر البوت: t.me/AlBalashon\\_services\\_bot"
+        elif action == "add_worker":
+            markup = InlineKeyboardMarkup([[InlineKeyboardButton("تواصل مع الصنايعي 📞", url=contact_url)]])
+            text_to_send = f"🛠️ *صنايعي/حرفة جديدة بالبلاشون*\n\n{details}\n\n🤖 للتواصل عبر البوت: t.me/AlBalashon\\_services\\_bot"
+        elif action == "add_brand":
+            markup = InlineKeyboardMarkup([[InlineKeyboardButton("تواصل مع صاحب البراند 💬", url=contact_url)]])
+            text_to_send = f"🏷️ *براند جديد بالبلاشون*\n\n{details}\n\n🤖 للتواصل عبر البوت: t.me/AlBalashon\\_services\\_bot"
+        elif action == "add_restaurant":
+            markup = InlineKeyboardMarkup([[InlineKeyboardButton("تواصل مع المطعم 📞", url=contact_url)]])
+            text_to_send = f"🍔 *مطعم جديد بالبلاشون*\n\n{details}\n\n🤖 للتواصل عبر البوت: t.me/AlBalashon\\_services\\_bot"
+        elif action == "add_captain":
+            markup = InlineKeyboardMarkup([[InlineKeyboardButton("تواصل مع الكابتن 📞", url=contact_url)]])
+            text_to_send = f"🛵 *كابتن توصيل جديد بالبلاشون*\n\n{details}\n\n🤖 للتواصل عبر البوت: t.me/AlBalashon\\_services\\_bot"
         else:
             return
 
