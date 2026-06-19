@@ -892,18 +892,60 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 # ════════════════════════════════════════════
 async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.effective_user.id
-    if user_id in ADMINS and context.user_data.get("admin_action") == "waiting_for_del_user_id":
-        context.user_data.pop("admin_action", None)
+    if user_id in ADMINS and "admin_action" in context.user_data:
+        action = context.user_data.pop("admin_action")
         text = update.message.text or ""
-        try:
-            target_id = int(text.strip())
-            execute_query("DELETE FROM users WHERE user_id = %s", (target_id,))
-            await update.message.reply_text(f"✅ تم حذف المستخدم {target_id} من قاعدة البيانات بنجاح.")
-        except ValueError:
-            await update.message.reply_text("⚠️ يرجى إرسال رقم صحيح (ID) للمستخدم.")
-        except Exception as e:
-            await update.message.reply_text(f"❌ حدث خطأ أثناء الحذف: {e}")
-        return ConversationHandler.END
+        
+        if action == "admin_add_worker_name":
+            context.user_data["admin_add_worker_name"] = text.strip()
+            context.user_data["admin_action"] = "admin_add_worker_phone"
+            await update.message.reply_text("📞 يرجى إرسال **رقم الهاتف** للفني الجديد:")
+            return ConversationHandler.END
+            
+        elif action == "admin_add_worker_phone":
+            name = context.user_data.pop("admin_add_worker_name", "فني")
+            craft = context.user_data.pop("admin_add_worker_craft", "work_wood")
+            phone = text.strip()
+            save_worker_to_db(name, craft, phone)
+            
+            keyboard = [[InlineKeyboardButton("🔙 رجوع لإدارة الفنيين", callback_data="adm_manage_workers")]]
+            await update.message.reply_text(f"✅ تم إضافة الفني *{name}* بنجاح إلى القسم.", parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+            return ConversationHandler.END
+            
+        elif action == "admin_add_doctor_details":
+            execute_query("INSERT INTO department_additions (category, details) VALUES (%s, %s)", ("doctor", text.strip()))
+            keyboard = [[InlineKeyboardButton("🔙 رجوع لإدارة الأطباء", callback_data="adm_manage_doctors")]]
+            await update.message.reply_text("✅ تم إضافة الطبيب بنجاح إلى القسم.", reply_markup=InlineKeyboardMarkup(keyboard))
+            return ConversationHandler.END
+            
+        elif action == "admin_add_brand_details":
+            execute_query("INSERT INTO department_additions (category, details) VALUES (%s, %s)", ("brand", text.strip()))
+            keyboard = [[InlineKeyboardButton("🔙 رجوع لإدارة البراندات", callback_data="adm_manage_brands")]]
+            await update.message.reply_text("✅ تم إضافة البراند بنجاح إلى القسم.", reply_markup=InlineKeyboardMarkup(keyboard))
+            return ConversationHandler.END
+            
+        elif action == "admin_add_restaurant_details":
+            execute_query("INSERT INTO department_additions (category, details) VALUES (%s, %s)", ("restaurant", text.strip()))
+            keyboard = [[InlineKeyboardButton("🔙 رجوع لإدارة المطاعم", callback_data="adm_manage_restaurants")]]
+            await update.message.reply_text("✅ تم إضافة المطعم بنجاح إلى القسم.", reply_markup=InlineKeyboardMarkup(keyboard))
+            return ConversationHandler.END
+            
+        elif action == "admin_add_captain_details":
+            execute_query("INSERT INTO department_additions (category, details) VALUES (%s, %s)", ("captain", text.strip()))
+            keyboard = [[InlineKeyboardButton("🔙 رجوع لإدارة الكباتن", callback_data="adm_manage_captains")]]
+            await update.message.reply_text("✅ تم إضافة كابتن التوصيل بنجاح إلى القسم.", reply_markup=InlineKeyboardMarkup(keyboard))
+            return ConversationHandler.END
+            
+        elif action == "waiting_for_del_user_id":
+            try:
+                target_id = int(text.strip())
+                execute_query("DELETE FROM users WHERE user_id = %s", (target_id,))
+                await update.message.reply_text(f"✅ تم حذف المستخدم {target_id} من قاعدة البيانات بنجاح.")
+            except ValueError:
+                await update.message.reply_text("⚠️ يرجى إرسال رقم صحيح (ID) للمستخدم.")
+            except Exception as e:
+                await update.message.reply_text(f"❌ حدث خطأ أثناء الحذف: {e}")
+            return ConversationHandler.END
 
     if not await check_subscription(user_id, context.bot):
         await prompt_subscription(update, context)
@@ -1327,13 +1369,44 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         
         if data == "adm_back_menu":
             keyboard = [
-                [InlineKeyboardButton("❌ حذف فني (صنايعي)", callback_data="adm_del_worker_select")],
-                [InlineKeyboardButton("❌ حذف قسم فني بالكامل", callback_data="adm_del_craft_select")],
-                [InlineKeyboardButton("❌ حذف إضافة معينة (طبيب/براند...)", callback_data="adm_del_addition_cat")],
-                [InlineKeyboardButton("👤 حذف مستخدم من البوت", callback_data="adm_del_user")],
-                [InlineKeyboardButton("⚠️ تصفير قاعدة البيانات بالكامل", callback_data="adm_reset_db_confirm")]
+                [InlineKeyboardButton("🛠️ إدارة الفنيين (الصنايعية)", callback_data="adm_manage_workers")],
+                [InlineKeyboardButton("🩺 إدارة الأطباء والعيادات", callback_data="adm_manage_doctors")],
+                [InlineKeyboardButton("🏷️ إدارة البراندات والمنتجات", callback_data="adm_manage_brands")],
+                [InlineKeyboardButton("🍔 إدارة المطاعم والأكلات", callback_data="adm_manage_restaurants")],
+                [InlineKeyboardButton("🛵 إدارة كباتن التوصيل", callback_data="adm_manage_captains")],
+                [InlineKeyboardButton("👤 إدارة المستخدمين والأمان", callback_data="adm_manage_users_security")]
             ]
-            await query.edit_message_text("👮‍♂️ *لوحة تحكم المشرف (الحذف والتعديل):*", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+            await query.edit_message_text("👮‍♂️ *لوحة تحكم وإدارة البوت للأدمن:*", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+            return
+            
+        # ─── 1. إدارة الفنيين ───
+        elif data == "adm_manage_workers":
+            keyboard = [
+                [InlineKeyboardButton("➕ إضافة فني يدوياً", callback_data="adm_add_worker_select")],
+                [InlineKeyboardButton("❌ حذف فني محدد", callback_data="adm_del_worker_select")],
+                [InlineKeyboardButton("⚠️ مسح قسم فني بالكامل", callback_data="adm_del_craft_select")],
+                [InlineKeyboardButton("🔙 رجوع للقائمة الرئيسية", callback_data="adm_back_menu")]
+            ]
+            await query.edit_message_text("🛠️ *إدارة قسم الفنيين (الصنايعية):*", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+            return
+            
+        elif data == "adm_add_worker_select":
+            keyboard = [
+                [InlineKeyboardButton("نجار 🪵", callback_data="adm_add_wcraft_work_wood")],
+                [InlineKeyboardButton("نقاش 🎨", callback_data="adm_add_wcraft_work_paint")],
+                [InlineKeyboardButton("كهربائي ⚡", callback_data="adm_add_wcraft_work_elec")],
+                [InlineKeyboardButton("مبلط 🧱", callback_data="adm_add_wcraft_work_ceramic")],
+                [InlineKeyboardButton("صيانة غسالات 🧼", callback_data="adm_add_wcraft_work_washing_machine")],
+                [InlineKeyboardButton("🔙 رجوع", callback_data="adm_manage_workers")]
+            ]
+            await query.edit_message_text("اختر القسم لإضافة الفني الجديد فيه:", reply_markup=InlineKeyboardMarkup(keyboard))
+            return
+            
+        elif data.startswith("adm_add_wcraft_"):
+            craft_key = data.replace("adm_add_wcraft_", "")
+            context.user_data["admin_action"] = "admin_add_worker_name"
+            context.user_data["admin_add_worker_craft"] = craft_key
+            await query.edit_message_text("📝 يرجى إرسال **اسم الفني** الجديد في رسالة:")
             return
             
         elif data == "adm_del_worker_select":
@@ -1343,7 +1416,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 [InlineKeyboardButton("كهربائي ⚡", callback_data="adm_del_wlist_work_elec")],
                 [InlineKeyboardButton("مبلط 🧱", callback_data="adm_del_wlist_work_ceramic")],
                 [InlineKeyboardButton("صيانة غسالات 🧼", callback_data="adm_del_wlist_work_washing_machine")],
-                [InlineKeyboardButton("🔙 رجوع للوحة التحكم", callback_data="adm_back_menu")]
+                [InlineKeyboardButton("🔙 رجوع", callback_data="adm_manage_workers")]
             ]
             await query.edit_message_text("اختر القسم لعرض الفنيين وحذف فني محدد:", reply_markup=InlineKeyboardMarkup(keyboard))
             return
@@ -1355,7 +1428,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 [InlineKeyboardButton("مسح كهربائية ⚡", callback_data="adm_del_craft_work_elec")],
                 [InlineKeyboardButton("مسح مبلطين 🧱", callback_data="adm_del_craft_work_ceramic")],
                 [InlineKeyboardButton("مسح صيانة غسالات 🧼", callback_data="adm_del_craft_work_washing_machine")],
-                [InlineKeyboardButton("🔙 رجوع للوحة التحكم", callback_data="adm_back_menu")]
+                [InlineKeyboardButton("🔙 رجوع", callback_data="adm_manage_workers")]
             ]
             await query.edit_message_text("⚠️ اختر القسم لمسح جميع الفنيين المسجلين فيه بالكامل:", reply_markup=InlineKeyboardMarkup(keyboard))
             return
@@ -1383,10 +1456,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             if rows:
                 name, craft = rows[0][0], rows[0][1]
                 execute_query("DELETE FROM workers WHERE id = %s", (w_id,))
-                keyboard = [[InlineKeyboardButton("🔙 رجوع للأقسام", callback_data="adm_del_worker_select")]]
+                keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="adm_del_worker_select")]]
                 await query.edit_message_text(f"✅ تم حذف الفني *{name}* من قاعدة البيانات بنجاح.", parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
             else:
-                keyboard = [[InlineKeyboardButton("🔙 رجوع للأقسام", callback_data="adm_del_worker_select")]]
+                keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="adm_del_worker_select")]]
                 await query.edit_message_text("⚠️ لم يتم العثور على الفني في قاعدة البيانات.", reply_markup=InlineKeyboardMarkup(keyboard))
             return
             
@@ -1394,8 +1467,99 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             craft_key = data.replace("adm_del_craft_", "")
             execute_query("DELETE FROM workers WHERE craft = %s", (craft_key,))
             
-            keyboard = [[InlineKeyboardButton("🔙 رجوع للوحة التحكم", callback_data="adm_back_menu")]]
+            keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="adm_manage_workers")]]
             await query.edit_message_text("✅ تم مسح جميع الفنيين في هذا القسم بنجاح.", reply_markup=InlineKeyboardMarkup(keyboard))
+            return
+            
+        # ─── 2. إدارة الأطباء ───
+        elif data == "adm_manage_doctors":
+            keyboard = [
+                [InlineKeyboardButton("➕ إضافة طبيب يدوياً", callback_data="adm_add_doctor_direct")],
+                [InlineKeyboardButton("❌ عرض وحذف طبيب", callback_data="adm_del_addlist_doctor")],
+                [InlineKeyboardButton("🔙 رجوع للقائمة الرئيسية", callback_data="adm_back_menu")]
+            ]
+            await query.edit_message_text("🩺 *إدارة قسم الأطباء والعيادات:*", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+            return
+            
+        elif data == "adm_add_doctor_direct":
+            context.user_data["admin_action"] = "admin_add_doctor_details"
+            await query.edit_message_text(
+                "📝 يرجى إرسال تفاصيل الطبيب/العيادة في رسالة واحدة كالتالي:\n\n"
+                "1. اسم الطبيب والتخصص:\n"
+                "2. العنوان بالتفصيل:\n"
+                "3. المواعيد:\n"
+                "4. رقم التواصل:"
+            )
+            return
+            
+        # ─── 3. إدارة البراندات ───
+        elif data == "adm_manage_brands":
+            keyboard = [
+                [InlineKeyboardButton("➕ إضافة براند يدوياً", callback_data="adm_add_brand_direct")],
+                [InlineKeyboardButton("❌ عرض وحذف براند", callback_data="adm_del_addlist_brand")],
+                [InlineKeyboardButton("🔙 رجوع للقائمة الرئيسية", callback_data="adm_back_menu")]
+            ]
+            await query.edit_message_text("🏷️ *إدارة قسم البراندات والمنتجات:*", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+            return
+            
+        elif data == "adm_add_brand_direct":
+            context.user_data["admin_action"] = "admin_add_brand_details"
+            await query.edit_message_text(
+                "📝 يرجى إرسال تفاصيل البراند في رسالة واحدة كالتالي:\n\n"
+                "1. اسم البراند:\n"
+                "2. وصف البراند/المنتجات:\n"
+                "3. الرابط (قناة/موقع/واتساب):"
+            )
+            return
+            
+        # ─── 4. إدارة المطاعم ───
+        elif data == "adm_manage_restaurants":
+            keyboard = [
+                [InlineKeyboardButton("➕ إضافة مطعم يدوياً", callback_data="adm_add_restaurant_direct")],
+                [InlineKeyboardButton("❌ عرض وحذف مطعم", callback_data="adm_del_addlist_restaurant")],
+                [InlineKeyboardButton("🔙 رجوع للقائمة الرئيسية", callback_data="adm_back_menu")]
+            ]
+            await query.edit_message_text("🍔 *إدارة قسم المطاعم والأكلات:*", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+            return
+            
+        elif data == "adm_add_restaurant_direct":
+            context.user_data["admin_action"] = "admin_add_restaurant_details"
+            await query.edit_message_text(
+                "📝 يرجى إرسال تفاصيل المطعم في رسالة واحدة كالتالي:\n\n"
+                "1. اسم المطعم:\n"
+                "2. نوع الأكل/الخدمات التي يقدمها:\n"
+                "3. العنوان ورقم التواصل:"
+            )
+            return
+            
+        # ─── 5. إدارة الكباتن ───
+        elif data == "adm_manage_captains":
+            keyboard = [
+                [InlineKeyboardButton("➕ إضافة كابتن يدوياً", callback_data="adm_add_captain_direct")],
+                [InlineKeyboardButton("❌ عرض وحذف كابتن", callback_data="adm_del_addlist_captain")],
+                [InlineKeyboardButton("🔙 رجوع للقائمة الرئيسية", callback_data="adm_back_menu")]
+            ]
+            await query.edit_message_text("🛵 *إدارة قسم كباتن التوصيل (دليفري):*", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+            return
+            
+        elif data == "adm_add_captain_direct":
+            context.user_data["admin_action"] = "admin_add_captain_details"
+            await query.edit_message_text(
+                "📝 يرجى إرسال تفاصيل كابتن التوصيل في رسالة واحدة كالتالي:\n\n"
+                "1. الاسم:\n"
+                "2. وسيلة التوصيل (موتوسيكل، سيارة، إلخ):\n"
+                "3. رقم التواصل:"
+            )
+            return
+            
+        # ─── 6. إدارة المستخدمين والأمان ───
+        elif data == "adm_manage_users_security":
+            keyboard = [
+                [InlineKeyboardButton("👤 حذف مستخدم من البوت", callback_data="adm_del_user")],
+                [InlineKeyboardButton("⚠️ تصفير قاعدة البيانات بالكامل", callback_data="adm_reset_db_confirm")],
+                [InlineKeyboardButton("🔙 رجوع للقائمة الرئيسية", callback_data="adm_back_menu")]
+            ]
+            await query.edit_message_text("👤 *إدارة المستخدمين والأمان:*", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
             return
             
         elif data == "adm_del_user":
@@ -1411,22 +1575,20 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await query.edit_message_text("⚠️ *تحذير هام جداً:*\n\nهل أنت متأكد من تصفير قاعدة البيانات بالكامل؟\nسيتم مسح جميع الفنيين والمستخدمين المسجلين ولا يمكن استعادة البيانات!", parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
             return
             
-        elif data == "adm_del_addition_cat":
-            keyboard = [
-                [InlineKeyboardButton("أطباء 🩺", callback_data="adm_del_addlist_doctor")],
-                [InlineKeyboardButton("براندات 🏷️", callback_data="adm_del_addlist_brand")],
-                [InlineKeyboardButton("مطاعم 🍔", callback_data="adm_del_addlist_restaurant")],
-                [InlineKeyboardButton("كباتن توصيل 🛵", callback_data="adm_del_addlist_captain")],
-                [InlineKeyboardButton("🔙 رجوع للوحة التحكم", callback_data="adm_back_menu")]
-            ]
-            await query.edit_message_text("اختر القسم لحذف عنصر محدد منه:", reply_markup=InlineKeyboardMarkup(keyboard))
-            return
-            
         elif data.startswith("adm_del_addlist_"):
             cat = data.replace("adm_del_addlist_", "")
             rows, _ = fetch_query("SELECT id, details FROM department_additions WHERE category = %s", (cat,))
+            
+            back_map = {
+                "doctor": "adm_manage_doctors",
+                "brand": "adm_manage_brands",
+                "restaurant": "adm_manage_restaurants",
+                "captain": "adm_manage_captains"
+            }
+            back_cb = back_map.get(cat, "adm_back_menu")
+            
             if not rows:
-                keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="adm_del_addition_cat")]]
+                keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data=back_cb)]]
                 await query.edit_message_text("⚠️ لا توجد إضافات مسجلة في هذا القسم حالياً.", reply_markup=InlineKeyboardMarkup(keyboard))
                 return
                 
@@ -1435,14 +1597,25 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 item_id, details = row[0], row[1]
                 short_text = details.replace("\n", " ")[:25] + "..."
                 keyboard.append([InlineKeyboardButton(f"❌ {short_text}", callback_data=f"adm_del_additem_{item_id}")])
-            keyboard.append([InlineKeyboardButton("🔙 رجوع", callback_data="adm_del_addition_cat")])
+            keyboard.append([InlineKeyboardButton("🔙 رجوع", callback_data=back_cb)])
             await query.edit_message_text("اختر العنصر الذي تريد حذفه نهائياً من البوت:", reply_markup=InlineKeyboardMarkup(keyboard))
             return
             
         elif data.startswith("adm_del_additem_"):
             item_id = int(data.replace("adm_del_additem_", ""))
+            rows, _ = fetch_query("SELECT category FROM department_additions WHERE id = %s", (item_id,))
+            cat = rows[0][0] if rows else "doctor"
             execute_query("DELETE FROM department_additions WHERE id = %s", (item_id,))
-            keyboard = [[InlineKeyboardButton("🔙 رجوع للوحة التحكم", callback_data="adm_back_menu")]]
+            
+            back_map = {
+                "doctor": "adm_manage_doctors",
+                "brand": "adm_manage_brands",
+                "restaurant": "adm_manage_restaurants",
+                "captain": "adm_manage_captains"
+            }
+            back_cb = back_map.get(cat, "adm_back_menu")
+            
+            keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data=back_cb)]]
             await query.edit_message_text("✅ تم حذف العنصر من قاعدة البيانات بنجاح.", reply_markup=InlineKeyboardMarkup(keyboard))
             return
 
@@ -1672,14 +1845,15 @@ async def admin_menu_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if update.effective_user.id not in ADMINS: return
     
     keyboard = [
-        [InlineKeyboardButton("❌ حذف فني (صنايعي)", callback_data="adm_del_worker_select")],
-        [InlineKeyboardButton("❌ حذف قسم فني بالكامل", callback_data="adm_del_craft_select")],
-        [InlineKeyboardButton("❌ حذف إضافة معينة (طبيب/براند...)", callback_data="adm_del_addition_cat")],
-        [InlineKeyboardButton("👤 حذف مستخدم من البوت", callback_data="adm_del_user")],
-        [InlineKeyboardButton("⚠️ تصفير قاعدة البيانات بالكامل", callback_data="adm_reset_db_confirm")]
+        [InlineKeyboardButton("🛠️ إدارة الفنيين (الصنايعية)", callback_data="adm_manage_workers")],
+        [InlineKeyboardButton("🩺 إدارة الأطباء والعيادات", callback_data="adm_manage_doctors")],
+        [InlineKeyboardButton("🏷️ إدارة البراندات والمنتجات", callback_data="adm_manage_brands")],
+        [InlineKeyboardButton("🍔 إدارة المطاعم والأكلات", callback_data="adm_manage_restaurants")],
+        [InlineKeyboardButton("🛵 إدارة كباتن التوصيل", callback_data="adm_manage_captains")],
+        [InlineKeyboardButton("👤 إدارة المستخدمين والأمان", callback_data="adm_manage_users_security")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("👮‍♂️ *لوحة تحكم المشرف (الحذف والتعديل):*", reply_markup=reply_markup, parse_mode="Markdown")
+    await update.message.reply_text("👮‍♂️ *لوحة تحكم وإدارة البوت للأدمن:*", reply_markup=reply_markup, parse_mode="Markdown")
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_user.id not in ADMINS: return
