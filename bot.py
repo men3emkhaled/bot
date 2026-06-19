@@ -1310,8 +1310,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     # --- الرفض الموحد ---
     if data.startswith("rej_"):
-        action = data.split("_")[1]
-        user_id = data.split("_")[2]
+        parts = data.split("_")
+        user_id = parts[-1]
+        action = "_".join(parts[1:-1])
         key = f"req_{action}_{user_id}"
         admin_msgs = context.bot_data.get(key, {})
         
@@ -1350,8 +1351,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     # --- الموافقة والنشر الموحد ---
     if data.startswith("app_"):
-        action = data.split("_")[1]
-        user_id = data.split("_")[2]
+        parts = data.split("_")
+        user_id = parts[-1]
+        action = "_".join(parts[1:-1])
         contact_url = f"tg://user?id={user_id}"
 
         markup = None
