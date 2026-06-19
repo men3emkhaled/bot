@@ -749,6 +749,7 @@ def init_db():
         cursor = pg_conn.cursor()
         cursor.execute("CREATE TABLE IF NOT EXISTS users (user_id BIGINT PRIMARY KEY, joined_at VARCHAR(100), last_seen VARCHAR(100))")
         cursor.execute("CREATE TABLE IF NOT EXISTS workers (id SERIAL PRIMARY KEY, name VARCHAR(255), craft VARCHAR(255), phone VARCHAR(100))")
+        cursor.execute("CREATE TABLE IF NOT EXISTS department_additions (id SERIAL PRIMARY KEY, category VARCHAR(50), details TEXT)")
         pg_conn.commit()
         logger.info("PostgreSQL database initialized successfully.")
     except Exception as e:
@@ -762,6 +763,7 @@ def init_db():
         sqlite_conn = sqlite3.connect(DB_PATH)
         sqlite_conn.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, joined_at TEXT, last_seen TEXT)")
         sqlite_conn.execute("CREATE TABLE IF NOT EXISTS workers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, craft TEXT, phone TEXT)")
+        sqlite_conn.execute("CREATE TABLE IF NOT EXISTS department_additions (id INTEGER PRIMARY KEY AUTOINCREMENT, category TEXT, details TEXT)")
         sqlite_conn.commit()
         sqlite_conn.close()
         logger.info("SQLite database initialized successfully.")
@@ -796,6 +798,20 @@ def get_db_workers(craft_key):
         return extra_text
     except Exception as e:
         logger.error(f"Error reading workers from db: {e}")
+        return ""
+
+def get_db_additions(category: str) -> str:
+    try:
+        rows, _ = fetch_query("SELECT details FROM department_additions WHERE category = %s", (category,))
+        if not rows:
+            return ""
+        extra_text = "\n\n----------------------------------------\n✨ *إضافات جديدة تم تسجيلها عبر البوت:*"
+        for row in rows:
+            details = row[0]
+            extra_text += f"\n\n{details}"
+        return extra_text
+    except Exception as e:
+        logger.error(f"Error reading additions from db: {e}")
         return ""
 
 def register_user(user_id: int):
@@ -913,7 +929,8 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return ConversationHandler.END
 
     if "دليل الأطباء" in text:
-        await update.message.reply_text(DOCTORS_TEXT, parse_mode="Markdown", reply_markup=DOCTORS_MARKUP, disable_web_page_preview=True)
+        extra = get_db_additions("doctor")
+        await update.message.reply_text(DOCTORS_TEXT + extra, parse_mode="Markdown", reply_markup=DOCTORS_MARKUP, disable_web_page_preview=True)
         return ConversationHandler.END
 
     if "مصمم البوت" in text:
@@ -937,7 +954,8 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             [InlineKeyboardButton("🍟 Viva Food", url="https://wa.me/201094318213"),
              InlineKeyboardButton("🥩 مطعم أحمد", url="https://wa.me/201006586263")]
         ])
-        await update.message.reply_text(RESTAURANTS_TEXT, parse_mode="Markdown", reply_markup=restaurants_markup)
+        extra = get_db_additions("restaurant")
+        await update.message.reply_text(RESTAURANTS_TEXT + extra, parse_mode="Markdown", reply_markup=restaurants_markup)
         return ConversationHandler.END
 
     elif "ملعب البلاشون" in text or "حجز ملعب" in text:
@@ -992,7 +1010,8 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return ConversationHandler.END
 
     elif "براند" in text and not "إضافة" in text and not "رجوع" in text:
-        await update.message.reply_text(BRANDS_TEXT, parse_mode="Markdown", reply_markup=BRANDS_KEYBOARD)
+        extra = get_db_additions("brand")
+        await update.message.reply_text(BRANDS_TEXT + extra, parse_mode="Markdown", reply_markup=BRANDS_KEYBOARD)
         return ConversationHandler.END
 
     elif "إضافة شغلك" in text:
@@ -1011,7 +1030,7 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             "2. العنوان بالتفصيل:\n"
             "3. المواعيد:\n"
             "4. رقم التواصل:\n\n"
-            "سيتم مراجعة طلبك ونشره في القناة فور موافقة الإدارة. ✅"
+            "سيتم مراجعة طلبك وإضافته لقسم الأطباء فور موافقة الإدارة. ✅"
         )
         context.user_data["choice"] = "إضافة طبيب"
         return WAITING_FOR_REQUEST_DETAILS
@@ -1030,7 +1049,7 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             "1. اسم البراند:\n"
             "2. وصف البراند/المنتجات:\n"
             "3. الرابط (قناة/موقع/واتساب):\n\n"
-            "سيتم مراجعة طلبك ونشره في القناة فور موافقة الإدارة. ✅"
+            "سيتم مراجعة طلبك وإضافته لقسم البراندات فور موافقة الإدارة. ✅"
         )
         context.user_data["choice"] = "إضافة براند"
         return WAITING_FOR_REQUEST_DETAILS
@@ -1041,7 +1060,7 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             "1. اسم المطعم:\n"
             "2. نوع الأكل/الخدمات التي يقدمها:\n"
             "3. العنوان ورقم التواصل:\n\n"
-            "سيتم مراجعة طلبك ونشره في القناة فور موافقة الإدارة. ✅"
+            "سيتم مراجعة طلبك وإضافته لقسم المطاعم فور موافقة الإدارة. ✅"
         )
         context.user_data["choice"] = "إضافة مطعم"
         return WAITING_FOR_REQUEST_DETAILS
@@ -1052,13 +1071,14 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             "1. الاسم:\n"
             "2. وسيلة التوصيل (موتوسيكل، سيارة، إلخ):\n"
             "3. رقم التواصل:\n\n"
-            "سيتم مراجعة طلبك ونشره في القناة فور موافقة الإدارة. ✅"
+            "سيتم مراجعة طلبك وإضافته لقسم كباتن التوصيل فور موافقة الإدارة. ✅"
         )
         context.user_data["choice"] = "إضافة كابتن"
         return WAITING_FOR_REQUEST_DETAILS
 
     elif "الشحن والتوصيل" in text:
-        await update.message.reply_text(DELIVERY_TEXT, parse_mode="Markdown")
+        extra = get_db_additions("captain")
+        await update.message.reply_text(DELIVERY_TEXT + extra, parse_mode="Markdown")
         return ConversationHandler.END
 
     # --- الردود التي تتطلب إدخال بيانات ---
@@ -1309,6 +1329,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             keyboard = [
                 [InlineKeyboardButton("❌ حذف فني (صنايعي)", callback_data="adm_del_worker_select")],
                 [InlineKeyboardButton("❌ حذف قسم فني بالكامل", callback_data="adm_del_craft_select")],
+                [InlineKeyboardButton("❌ حذف إضافة معينة (طبيب/براند...)", callback_data="adm_del_addition_cat")],
                 [InlineKeyboardButton("👤 حذف مستخدم من البوت", callback_data="adm_del_user")],
                 [InlineKeyboardButton("⚠️ تصفير قاعدة البيانات بالكامل", callback_data="adm_reset_db_confirm")]
             ]
@@ -1390,9 +1411,45 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await query.edit_message_text("⚠️ *تحذير هام جداً:*\n\nهل أنت متأكد من تصفير قاعدة البيانات بالكامل؟\nسيتم مسح جميع الفنيين والمستخدمين المسجلين ولا يمكن استعادة البيانات!", parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
             return
             
+        elif data == "adm_del_addition_cat":
+            keyboard = [
+                [InlineKeyboardButton("أطباء 🩺", callback_data="adm_del_addlist_doctor")],
+                [InlineKeyboardButton("براندات 🏷️", callback_data="adm_del_addlist_brand")],
+                [InlineKeyboardButton("مطاعم 🍔", callback_data="adm_del_addlist_restaurant")],
+                [InlineKeyboardButton("كباتن توصيل 🛵", callback_data="adm_del_addlist_captain")],
+                [InlineKeyboardButton("🔙 رجوع للوحة التحكم", callback_data="adm_back_menu")]
+            ]
+            await query.edit_message_text("اختر القسم لحذف عنصر محدد منه:", reply_markup=InlineKeyboardMarkup(keyboard))
+            return
+            
+        elif data.startswith("adm_del_addlist_"):
+            cat = data.replace("adm_del_addlist_", "")
+            rows, _ = fetch_query("SELECT id, details FROM department_additions WHERE category = %s", (cat,))
+            if not rows:
+                keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="adm_del_addition_cat")]]
+                await query.edit_message_text("⚠️ لا توجد إضافات مسجلة في هذا القسم حالياً.", reply_markup=InlineKeyboardMarkup(keyboard))
+                return
+                
+            keyboard = []
+            for row in rows:
+                item_id, details = row[0], row[1]
+                short_text = details.replace("\n", " ")[:25] + "..."
+                keyboard.append([InlineKeyboardButton(f"❌ {short_text}", callback_data=f"adm_del_additem_{item_id}")])
+            keyboard.append([InlineKeyboardButton("🔙 رجوع", callback_data="adm_del_addition_cat")])
+            await query.edit_message_text("اختر العنصر الذي تريد حذفه نهائياً من البوت:", reply_markup=InlineKeyboardMarkup(keyboard))
+            return
+            
+        elif data.startswith("adm_del_additem_"):
+            item_id = int(data.replace("adm_del_additem_", ""))
+            execute_query("DELETE FROM department_additions WHERE id = %s", (item_id,))
+            keyboard = [[InlineKeyboardButton("🔙 رجوع للوحة التحكم", callback_data="adm_back_menu")]]
+            await query.edit_message_text("✅ تم حذف العنصر من قاعدة البيانات بنجاح.", reply_markup=InlineKeyboardMarkup(keyboard))
+            return
+
         elif data == "adm_reset_db_yes":
             execute_query("DELETE FROM users")
             execute_query("DELETE FROM workers")
+            execute_query("DELETE FROM department_additions")
             keyboard = [[InlineKeyboardButton("🔙 العودة للوحة التحكم", callback_data="adm_back_menu")]]
             await query.edit_message_text("✅ تم تصفير قاعدة البيانات وحذف جميع البيانات بنجاح.", reply_markup=InlineKeyboardMarkup(keyboard))
             return
@@ -1443,7 +1500,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     if data == "back_doctors":
-        await query.message.edit_text(DOCTORS_TEXT, parse_mode="Markdown", reply_markup=DOCTORS_MARKUP)
+        extra = get_db_additions("doctor")
+        await query.message.edit_text(DOCTORS_TEXT + extra, parse_mode="Markdown", reply_markup=DOCTORS_MARKUP)
         return
 
     if data == "back_workers":
@@ -1507,6 +1565,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         user_id = parts[-1]
         action = "_".join(parts[1:-1])
         contact_url = f"tg://user?id={user_id}"
+        is_direct_addition = action in ["add_worker", "add_doctor", "add_brand", "add_restaurant", "add_captain"]
 
         markup = None
         if action == "sos":
@@ -1532,12 +1591,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         elif action == "add_worker":
             markup = InlineKeyboardMarkup([[InlineKeyboardButton("تواصل مع الصنايعي 📞", url=contact_url)]])
             text_to_send = f"🛠️ *صنايعي/حرفة جديدة بالبلاشون*\n\n{details}\n\n🤖 للتواصل عبر البوت: t.me/AlBalashon\\_services\\_bot"
-            
-            # Save worker to db
-            req_data_key = f"worker_data_{user_id}"
-            worker_data = context.bot_data.pop(req_data_key, None)
-            if worker_data:
-                save_worker_to_db(worker_data["name"], worker_data["craft"], worker_data["phone"])
         elif action == "add_brand":
             markup = InlineKeyboardMarkup([[InlineKeyboardButton("تواصل مع صاحب البراند 💬", url=contact_url)]])
             text_to_send = f"🏷️ *براند جديد بالبلاشون*\n\n{details}\n\n🤖 للتواصل عبر البوت: t.me/AlBalashon\\_services\\_bot"
@@ -1551,20 +1604,42 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return
 
         try:
-            if photo_file_id:
-                if markup: await context.bot.send_photo(CHANNEL_ID, photo_file_id, caption=text_to_send, parse_mode="Markdown", reply_markup=markup)
-                else: await context.bot.send_photo(CHANNEL_ID, photo_file_id, caption=text_to_send, parse_mode="Markdown")
+            if is_direct_addition:
+                # Save data directly to the database and bypass channel notification
+                if action == "add_worker":
+                    req_data_key = f"worker_data_{user_id}"
+                    worker_data = context.bot_data.pop(req_data_key, None)
+                    if worker_data:
+                        save_worker_to_db(worker_data["name"], worker_data["craft"], worker_data["phone"])
+                else:
+                    cat_map = {
+                        "add_doctor": "doctor",
+                        "add_brand": "brand",
+                        "add_restaurant": "restaurant",
+                        "add_captain": "captain"
+                    }
+                    if action in cat_map:
+                        execute_query("INSERT INTO department_additions (category, details) VALUES (%s, %s)", (cat_map[action], details))
+                
+                await context.bot.send_message(chat_id=int(user_id), text="✅ تمت الموافقة على طلبك وإضافته إلى الأقسام بنجاح!")
+                status_text = f"✅ **تمت الإضافة بنجاح بواسطة {admin_user}.**"
             else:
-                if markup: await context.bot.send_message(CHANNEL_ID, text=text_to_send, parse_mode="Markdown", reply_markup=markup)
-                else: await context.bot.send_message(CHANNEL_ID, text=text_to_send, parse_mode="Markdown")
-            
-            await context.bot.send_message(chat_id=int(user_id), text="✅ تمت الموافقة على طلبك ونشره في القناة بنجاح!")
-            
+                # Normal alerts get published to the channel
+                if photo_file_id:
+                    if markup: await context.bot.send_photo(CHANNEL_ID, photo_file_id, caption=text_to_send, parse_mode="Markdown", reply_markup=markup)
+                    else: await context.bot.send_photo(CHANNEL_ID, photo_file_id, caption=text_to_send, parse_mode="Markdown")
+                else:
+                    if markup: await context.bot.send_message(CHANNEL_ID, text=text_to_send, parse_mode="Markdown", reply_markup=markup)
+                    else: await context.bot.send_message(CHANNEL_ID, text=text_to_send, parse_mode="Markdown")
+                
+                await context.bot.send_message(chat_id=int(user_id), text="✅ تمت الموافقة على طلبك ونشره في القناة بنجاح!")
+                status_text = f"✅ **نُشر بواسطة {admin_user}.**"
+
             key = f"req_{action}_{user_id}"
             admin_msgs = context.bot_data.get(key, {})
             if not admin_msgs:
-                if photo_file_id: await query.edit_message_caption(caption=f"{admin_msg_text}\n\n✅ **نُشر بواسطة {admin_user}.**", parse_mode="Markdown")
-                else: await query.edit_message_text(text=f"{admin_msg_text}\n\n✅ **نُشر بواسطة {admin_user}.**", parse_mode="Markdown")
+                if photo_file_id: await query.edit_message_caption(caption=f"{admin_msg_text}\n\n{status_text}", parse_mode="Markdown")
+                else: await query.edit_message_text(text=f"{admin_msg_text}\n\n{status_text}", parse_mode="Markdown")
             else:
                 for adm_id_str, msg_id in admin_msgs.items():
                     try:
@@ -1572,14 +1647,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                             await context.bot.edit_message_caption(
                                 chat_id=int(adm_id_str),
                                 message_id=msg_id,
-                                caption=f"{admin_msg_text}\n\n✅ **نُشر بواسطة {admin_user}.**",
+                                caption=f"{admin_msg_text}\n\n{status_text}",
                                 parse_mode="Markdown"
                             )
                         else:
                             await context.bot.edit_message_text(
                                 chat_id=int(adm_id_str),
                                 message_id=msg_id,
-                                text=f"{admin_msg_text}\n\n✅ **نُشر بواسطة {admin_user}.**",
+                                text=f"{admin_msg_text}\n\n{status_text}",
                                 parse_mode="Markdown"
                             )
                     except Exception as e:
@@ -1587,8 +1662,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             context.bot_data.pop(key, None)
         except Exception as e:
             logger.error(e)
-            if photo_file_id: await query.edit_message_caption(caption=f"{admin_msg_text}\n\n❌ **حدث خطأ أثناء النشر.**", parse_mode="Markdown")
-            else: await query.edit_message_text(text=f"{admin_msg_text}\n\n❌ **حدث خطأ أثناء النشر.**", parse_mode="Markdown")
+            if photo_file_id: await query.edit_message_caption(caption=f"{admin_msg_text}\n\n❌ **حدث خطأ أثناء الموافقة.**", parse_mode="Markdown")
+            else: await query.edit_message_text(text=f"{admin_msg_text}\n\n❌ **حدث خطأ أثناء الموافقة.**", parse_mode="Markdown")
 
 # ════════════════════════════════════════════
 #  أوامر الأدمن والأذكار المجدولة
@@ -1599,6 +1674,7 @@ async def admin_menu_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     keyboard = [
         [InlineKeyboardButton("❌ حذف فني (صنايعي)", callback_data="adm_del_worker_select")],
         [InlineKeyboardButton("❌ حذف قسم فني بالكامل", callback_data="adm_del_craft_select")],
+        [InlineKeyboardButton("❌ حذف إضافة معينة (طبيب/براند...)", callback_data="adm_del_addition_cat")],
         [InlineKeyboardButton("👤 حذف مستخدم من البوت", callback_data="adm_del_user")],
         [InlineKeyboardButton("⚠️ تصفير قاعدة البيانات بالكامل", callback_data="adm_reset_db_confirm")]
     ]
