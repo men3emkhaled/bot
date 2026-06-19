@@ -1,5 +1,6 @@
 import logging
 import sqlite3
+import psycopg2
 import asyncio
 import datetime
 import textwrap
@@ -690,59 +691,101 @@ logger = logging.getLogger(__name__)
 # ════════════════════════════════════════════
 #  قاعدة البيانات
 # ════════════════════════════════════════════
+POSTGRES_URL = os.getenv("DATABASE_URL", "postgresql://neondb_owner:npg_gqp6MIP2DcaK@ep-falling-wind-atgrr0p1.c-9.us-east-1.aws.neon.tech/neondb?sslmode=require")
+
+def execute_query(query_str, params=None):
+    """Executes a query (INSERT/UPDATE/DELETE) on PostgreSQL and falls back to SQLite if it fails."""
+    pg_success = False
+    try:
+        pg_conn = psycopg2.connect(POSTGRES_URL)
+        cursor = pg_conn.cursor()
+        cursor.execute(query_str, params or ())
+        pg_conn.commit()
+        pg_conn.close()
+        pg_success = True
+    except Exception as e:
+        logger.error(f"PostgreSQL execute error: {e}")
+
+    try:
+        sqlite_conn = sqlite3.connect(DB_PATH)
+        sqlite_query = query_str.replace("%s", "?")
+        sqlite_conn.execute(sqlite_query, params or ())
+        sqlite_conn.commit()
+        sqlite_conn.close()
+    except Exception as e:
+        logger.error(f"SQLite execute error: {e}")
+        
+    return pg_success
+
+def fetch_query(query_str, params=None):
+    """Fetches rows from PostgreSQL (preferred) or SQLite (fallback)."""
+    try:
+        pg_conn = psycopg2.connect(POSTGRES_URL)
+        cursor = pg_conn.cursor()
+        cursor.execute(query_str, params or ())
+        rows = cursor.fetchall()
+        pg_conn.close()
+        return rows, True
+    except Exception as e:
+        logger.error(f"PostgreSQL fetch error, falling back to SQLite: {e}")
+
+    try:
+        sqlite_conn = sqlite3.connect(DB_PATH)
+        sqlite_query = query_str.replace("%s", "?")
+        cursor = sqlite_conn.cursor()
+        cursor.execute(sqlite_query, params or ())
+        rows = cursor.fetchall()
+        sqlite_conn.close()
+        return rows, False
+    except Exception as e:
+        logger.error(f"SQLite fetch error: {e}")
+        return [], False
+
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, joined_at TEXT, last_seen TEXT)")
-    conn.execute("CREATE TABLE IF NOT EXISTS workers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, craft TEXT, phone TEXT)")
-    
-    # ترقية قاعدة البيانات الحالية بشكل آمن
-    cursor = conn.cursor()
-    cursor.execute("PRAGMA table_info(users)")
-    columns = [row[1] for row in cursor.fetchall()]
-    if "joined_at" not in columns:
-        try:
-            conn.execute("ALTER TABLE users ADD COLUMN joined_at TEXT")
-        except Exception as e:
-            logger.error(f"Error adding joined_at: {e}")
-    if "last_seen" not in columns:
-        try:
-            conn.execute("ALTER TABLE users ADD COLUMN last_seen TEXT")
-        except Exception as e:
-            logger.error(f"Error adding last_seen: {e}")
-            
-    conn.commit()
-    conn.close()
+    # Initialize PostgreSQL
+    pg_conn = None
+    try:
+        pg_conn = psycopg2.connect(POSTGRES_URL)
+        cursor = pg_conn.cursor()
+        cursor.execute("CREATE TABLE IF NOT EXISTS users (user_id BIGINT PRIMARY KEY, joined_at VARCHAR(100), last_seen VARCHAR(100))")
+        cursor.execute("CREATE TABLE IF NOT EXISTS workers (id SERIAL PRIMARY KEY, name VARCHAR(255), craft VARCHAR(255), phone VARCHAR(100))")
+        pg_conn.commit()
+        logger.info("PostgreSQL database initialized successfully.")
+    except Exception as e:
+        logger.error(f"PostgreSQL initialization failed: {e}")
+    finally:
+        if pg_conn:
+            pg_conn.close()
+
+    # Initialize SQLite (local backup)
+    try:
+        sqlite_conn = sqlite3.connect(DB_PATH)
+        sqlite_conn.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, joined_at TEXT, last_seen TEXT)")
+        sqlite_conn.execute("CREATE TABLE IF NOT EXISTS workers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, craft TEXT, phone TEXT)")
+        sqlite_conn.commit()
+        sqlite_conn.close()
+        logger.info("SQLite database initialized successfully.")
+    except Exception as e:
+        logger.error(f"SQLite database initialization failed: {e}")
 
 def update_activity(user_id: int):
-    conn = sqlite3.connect(DB_PATH)
     today = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=3))).date().isoformat()
-    cursor = conn.cursor()
-    cursor.execute("SELECT user_id FROM users WHERE user_id = ?", (user_id,))
-    row = cursor.fetchone()
-    if row:
-        conn.execute("UPDATE users SET last_seen = ? WHERE user_id = ?", (today, user_id))
+    rows, _ = fetch_query("SELECT user_id FROM users WHERE user_id = %s", (user_id,))
+    if rows:
+        execute_query("UPDATE users SET last_seen = %s WHERE user_id = %s", (today, user_id))
     else:
-        conn.execute("INSERT INTO users (user_id, joined_at, last_seen) VALUES (?, ?, ?)", (user_id, today, today))
-    conn.commit()
-    conn.close()
+        execute_query("INSERT INTO users (user_id, joined_at, last_seen) VALUES (%s, %s, %s)", (user_id, today, today))
 
 def save_worker_to_db(name, craft, phone):
     try:
-        conn = sqlite3.connect(DB_PATH)
-        conn.execute("INSERT INTO workers (name, craft, phone) VALUES (?, ?, ?)", (name, craft, phone))
-        conn.commit()
-        conn.close()
+        execute_query("INSERT INTO workers (name, craft, phone) VALUES (%s, %s, %s)", (name, craft, phone))
         logger.info(f"Worker {name} ({craft}) saved to database.")
     except Exception as e:
         logger.error(f"Error saving worker to db: {e}")
 
 def get_db_workers(craft_key):
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT name, phone FROM workers WHERE craft = ?", (craft_key,))
-        rows = cursor.fetchall()
-        conn.close()
+        rows, _ = fetch_query("SELECT name, phone FROM workers WHERE craft = %s", (craft_key,))
         if not rows:
             return ""
         
@@ -759,24 +802,23 @@ def register_user(user_id: int):
     update_activity(user_id)
 
 def get_all_user_ids() -> list:
-    conn = sqlite3.connect(DB_PATH)
-    rows = conn.execute("SELECT user_id FROM users").fetchall()
-    conn.close()
+    rows, _ = fetch_query("SELECT user_id FROM users")
     return [r[0] for r in rows]
 
 def get_user_count() -> int:
-    conn = sqlite3.connect(DB_PATH)
-    count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    conn.close()
-    return count
+    rows, _ = fetch_query("SELECT COUNT(*) FROM users")
+    return rows[0][0] if rows else 0
 
 def get_stats_data() -> dict:
-    conn = sqlite3.connect(DB_PATH)
     today = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=3))).date().isoformat()
-    total = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    active_today = conn.execute("SELECT COUNT(*) FROM users WHERE last_seen = ?", (today,)).fetchone()[0]
-    new_today = conn.execute("SELECT COUNT(*) FROM users WHERE joined_at = ?", (today,)).fetchone()[0]
-    conn.close()
+    total_rows, _ = fetch_query("SELECT COUNT(*) FROM users")
+    active_rows, _ = fetch_query("SELECT COUNT(*) FROM users WHERE last_seen = %s", (today,))
+    new_rows, _ = fetch_query("SELECT COUNT(*) FROM users WHERE joined_at = %s", (today,))
+    
+    total = total_rows[0][0] if total_rows else 0
+    active_today = active_rows[0][0] if active_rows else 0
+    new_today = new_rows[0][0] if new_rows else 0
+    
     return {
         "total": total,
         "active_today": active_today,
@@ -834,6 +876,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 # ════════════════════════════════════════════
 async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.effective_user.id
+    if user_id in ADMINS and context.user_data.get("admin_action") == "waiting_for_del_user_id":
+        context.user_data.pop("admin_action", None)
+        text = update.message.text or ""
+        try:
+            target_id = int(text.strip())
+            execute_query("DELETE FROM users WHERE user_id = %s", (target_id,))
+            await update.message.reply_text(f"✅ تم حذف المستخدم {target_id} من قاعدة البيانات بنجاح.")
+        except ValueError:
+            await update.message.reply_text("⚠️ يرجى إرسال رقم صحيح (ID) للمستخدم.")
+        except Exception as e:
+            await update.message.reply_text(f"❌ حدث خطأ أثناء الحذف: {e}")
+        return ConversationHandler.END
+
     if not await check_subscription(user_id, context.bot):
         await prompt_subscription(update, context)
         return ConversationHandler.END
@@ -1245,6 +1300,103 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     data = query.data
     user_id = update.effective_user.id
 
+    # ─── لوحة تحكم المشرف (الحذف والتعديل) ───
+    if data.startswith("adm_"):
+        if user_id not in ADMINS:
+            return
+        
+        if data == "adm_back_menu":
+            keyboard = [
+                [InlineKeyboardButton("❌ حذف فني (صنايعي)", callback_data="adm_del_worker_select")],
+                [InlineKeyboardButton("❌ حذف قسم فني بالكامل", callback_data="adm_del_craft_select")],
+                [InlineKeyboardButton("👤 حذف مستخدم من البوت", callback_data="adm_del_user")],
+                [InlineKeyboardButton("⚠️ تصفير قاعدة البيانات بالكامل", callback_data="adm_reset_db_confirm")]
+            ]
+            await query.edit_message_text("👮‍♂️ *لوحة تحكم المشرف (الحذف والتعديل):*", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+            return
+            
+        elif data == "adm_del_worker_select":
+            keyboard = [
+                [InlineKeyboardButton("نجار 🪵", callback_data="adm_del_wlist_work_wood")],
+                [InlineKeyboardButton("نقاش 🎨", callback_data="adm_del_wlist_work_paint")],
+                [InlineKeyboardButton("كهربائي ⚡", callback_data="adm_del_wlist_work_elec")],
+                [InlineKeyboardButton("مبلط 🧱", callback_data="adm_del_wlist_work_ceramic")],
+                [InlineKeyboardButton("صيانة غسالات 🧼", callback_data="adm_del_wlist_work_washing_machine")],
+                [InlineKeyboardButton("🔙 رجوع للوحة التحكم", callback_data="adm_back_menu")]
+            ]
+            await query.edit_message_text("اختر القسم لعرض الفنيين وحذف فني محدد:", reply_markup=InlineKeyboardMarkup(keyboard))
+            return
+            
+        elif data == "adm_del_craft_select":
+            keyboard = [
+                [InlineKeyboardButton("مسح نجارين 🪵", callback_data="adm_del_craft_work_wood")],
+                [InlineKeyboardButton("مسح نقاشين 🎨", callback_data="adm_del_craft_work_paint")],
+                [InlineKeyboardButton("مسح كهربائية ⚡", callback_data="adm_del_craft_work_elec")],
+                [InlineKeyboardButton("مسح مبلطين 🧱", callback_data="adm_del_craft_work_ceramic")],
+                [InlineKeyboardButton("مسح صيانة غسالات 🧼", callback_data="adm_del_craft_work_washing_machine")],
+                [InlineKeyboardButton("🔙 رجوع للوحة التحكم", callback_data="adm_back_menu")]
+            ]
+            await query.edit_message_text("⚠️ اختر القسم لمسح جميع الفنيين المسجلين فيه بالكامل:", reply_markup=InlineKeyboardMarkup(keyboard))
+            return
+            
+        elif data.startswith("adm_del_wlist_"):
+            craft_key = data.replace("adm_del_wlist_", "")
+            rows, _ = fetch_query("SELECT id, name, phone FROM workers WHERE craft = %s", (craft_key,))
+            
+            if not rows:
+                keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="adm_del_worker_select")]]
+                await query.edit_message_text("⚠️ لا يوجد فنيين مسجلين في هذا القسم حالياً.", reply_markup=InlineKeyboardMarkup(keyboard))
+                return
+                
+            keyboard = []
+            for row in rows:
+                w_id, name, phone = row[0], row[1], row[2]
+                keyboard.append([InlineKeyboardButton(f"❌ {name} ({phone})", callback_data=f"adm_del_worker_{w_id}")])
+            keyboard.append([InlineKeyboardButton("🔙 رجوع", callback_data="adm_del_worker_select")])
+            await query.edit_message_text("اختر الفني الذي تريد حذفه نهائياً من البوت:", reply_markup=InlineKeyboardMarkup(keyboard))
+            return
+            
+        elif data.startswith("adm_del_worker_"):
+            w_id = int(data.replace("adm_del_worker_", ""))
+            rows, _ = fetch_query("SELECT name, craft FROM workers WHERE id = %s", (w_id,))
+            if rows:
+                name, craft = rows[0][0], rows[0][1]
+                execute_query("DELETE FROM workers WHERE id = %s", (w_id,))
+                keyboard = [[InlineKeyboardButton("🔙 رجوع للأقسام", callback_data="adm_del_worker_select")]]
+                await query.edit_message_text(f"✅ تم حذف الفني *{name}* من قاعدة البيانات بنجاح.", parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+            else:
+                keyboard = [[InlineKeyboardButton("🔙 رجوع للأقسام", callback_data="adm_del_worker_select")]]
+                await query.edit_message_text("⚠️ لم يتم العثور على الفني في قاعدة البيانات.", reply_markup=InlineKeyboardMarkup(keyboard))
+            return
+            
+        elif data.startswith("adm_del_craft_"):
+            craft_key = data.replace("adm_del_craft_", "")
+            execute_query("DELETE FROM workers WHERE craft = %s", (craft_key,))
+            
+            keyboard = [[InlineKeyboardButton("🔙 رجوع للوحة التحكم", callback_data="adm_back_menu")]]
+            await query.edit_message_text("✅ تم مسح جميع الفنيين في هذا القسم بنجاح.", reply_markup=InlineKeyboardMarkup(keyboard))
+            return
+            
+        elif data == "adm_del_user":
+            context.user_data["admin_action"] = "waiting_for_del_user_id"
+            await query.edit_message_text("💬 يرجى إرسال الـ User ID الخاص بالمستخدم الذي تريد حذفه من قاعدة البيانات في الرسالة التالية:")
+            return
+            
+        elif data == "adm_reset_db_confirm":
+            keyboard = [
+                [InlineKeyboardButton("نعم، متأكد وموافق ⚠️", callback_data="adm_reset_db_yes")],
+                [InlineKeyboardButton("🔙 تراجع وإلغاء", callback_data="adm_back_menu")]
+            ]
+            await query.edit_message_text("⚠️ *تحذير هام جداً:*\n\nهل أنت متأكد من تصفير قاعدة البيانات بالكامل؟\nسيتم مسح جميع الفنيين والمستخدمين المسجلين ولا يمكن استعادة البيانات!", parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+            return
+            
+        elif data == "adm_reset_db_yes":
+            execute_query("DELETE FROM users")
+            execute_query("DELETE FROM workers")
+            keyboard = [[InlineKeyboardButton("🔙 العودة للوحة التحكم", callback_data="adm_back_menu")]]
+            await query.edit_message_text("✅ تم تصفير قاعدة البيانات وحذف جميع البيانات بنجاح.", reply_markup=InlineKeyboardMarkup(keyboard))
+            return
+
     if data == "check_sub":
         subscribed = await check_subscription(user_id, context.bot)
         if subscribed:
@@ -1441,6 +1593,18 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 # ════════════════════════════════════════════
 #  أوامر الأدمن والأذكار المجدولة
 # ════════════════════════════════════════════
+async def admin_menu_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.effective_user.id not in ADMINS: return
+    
+    keyboard = [
+        [InlineKeyboardButton("❌ حذف فني (صنايعي)", callback_data="adm_del_worker_select")],
+        [InlineKeyboardButton("❌ حذف قسم فني بالكامل", callback_data="adm_del_craft_select")],
+        [InlineKeyboardButton("👤 حذف مستخدم من البوت", callback_data="adm_del_user")],
+        [InlineKeyboardButton("⚠️ تصفير قاعدة البيانات بالكامل", callback_data="adm_reset_db_confirm")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("👮‍♂️ *لوحة تحكم المشرف (الحذف والتعديل):*", reply_markup=reply_markup, parse_mode="Markdown")
+
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_user.id not in ADMINS: return
     stats_data = get_stats_data()
@@ -1569,6 +1733,7 @@ def main():
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(CommandHandler("broadcast", broadcast))
+    app.add_handler(CommandHandler("admin", admin_menu_cmd))
 
     logger.info("🚀 AlBalashon Bot started. Send /start to begin.")
     app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
