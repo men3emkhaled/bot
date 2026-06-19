@@ -260,19 +260,15 @@ ALFATH_CLINICS_TEXT = textwrap.dedent("""\
     🤖 للبوت والخدمات: t.me/AlBalashon\\_services\\_bot""")
 
 DEVELOPER_TEXT = textwrap.dedent("""\
-    🏅 *Captain & Engineer: Badr Frere*
+    💻 *مصمم ومطور البوت:*
     ----------------------------------------
-    💪 *[الجانب الرياضي والصحي]:*
-    • التخصص: مدرب فيتنس وكوتش تغذية محترف (Professional Nutritionist).
-    • المقر الحالي: أكاديمية جروكسي (Goroxi Academy) - العاشر من رمضان.
-    • الخدمات: تصميم برامج تدريبية، خطط تغذية علمية وحساب ماكروز للتخسيس أو التضخيم.
-
     💻 *[الجانب التقني والبرمجي]:*
     • التخصص: Front-End Developer
     • الخدمات المتاحة لأصحاب الأعمال والمشاريع:
       - تصميم وتطوير مواقع احترافية للبرندات والشركات.
       - بناء أنظمة كاشير وإدارة ومبيعات متكاملة (ERP Systems).
       - تطوير سيستم كامل لإدارة الشركات التدريبية والأكاديميات.
+      - تصميم وتطوير بوتات تيليجرام احترافية.
 
     📞 *رقم التواصل والواتساب المباشر:* 01020549760
     ----------------------------------------
@@ -308,7 +304,12 @@ EMERGENCY_DOCTOR_TEXT = textwrap.dedent("""\
 
 EVENING_AZKAR_TEXT = textwrap.dedent("""\
     أَعُوذُ بِاللهِ مِنْ الشَّيْطَانِ الرَّجِيمِ
-    {اللّهُ لاَ إِلَـهَ إِلاَّ هُوَ الْحَيُّ الْقَيُّومُ لاَ تَأْخُذُهُ سِنَةٌ وَلاَ نَوْمٌ لَّهُ مَا فِي السَّمَاوَاتِ وَمَا فِي الأَرْضِ مَن ذَا الَّذِي يَشْفَعُ عِنْدَهُ إِلاَّ بِإِذْنِهِ يَعْلَمُ مَا بَيْنَ أَيْدِيهِمْ وَمَا خَلْفَهُمْ وَلاَ يُحِيطُونَ بِشَيْءٍ مِّنْ عِلْمِهِ إِلاَّ بِمَا شَاء وَسِعَ كُرْسِيُّهُ السَّمَاوَاتِ وَالأَرْضَ وَلاَ يَؤُودُهُ حِفْظُهُمَا وَهُوَ الْعَلِيُّ الْعَظِيمُ}""")
+    {اللّهُ لاَ إِلَـهَ إِلاَّ هُوَ الْحَيُّ الْقَيُّومُ لاَ تَأْخُذُهُ سِنَةٌ وَلاَ نَوْمٌ لَّهُ مَا فِي السَّمَاوَاتِ وَمَا فِي الأَرْضِ مَن ذَا الَّذِي يَشْفَعُ عِنْدَهُ إِلاَّ بِإِذْنِهِ يَعْلَمُ مَا بَيْنَ أَيْدِيهِمْ وَمَا خَلْفَهُمْ وَلاَ يُحِيطُونَ بِشَيْءٍ مِّنْ عِلْمِهِ إِلاَّ بِمَا شَاء وَسِعَ كُرْسِيُّهُ السَّمَاوَاتِ وَالأَرْضَ وَلاَ يَؤُودُهُ حِفْظُهُمَا وَهُوَ الْعَلِيُّ الْعَظِيمُ}
+
+    ┈┈┈┈┈┈┈┈┈┈┈┈
+    🔹 *[مرة واحدة]:*
+    أمسينا على فطرةِ الإسلام، وعلى كلمةِ الإخلاص، وعلى دين نبينا محمدٍ صلى الله عليه وسلم، وعلى ملة أبينا إبراهيم حنيفاً مسلماً وما كان من المشركين.
+    _(رواه أحمد)_""")
 
 SELF_CARE_TEXT = textwrap.dedent("""\
     ✨ *صيدلية د/ نهال محمد - Self Care* ✨
@@ -617,6 +618,16 @@ ADD_WORK_KEYBOARD = ReplyKeyboardMarkup(
     resize_keyboard=True,
 )
 
+ADD_WORKER_CRAFT_KEYBOARD = ReplyKeyboardMarkup(
+    [
+        ["نجار 🪵", "نقاش 🎨"],
+        ["كهربائي ⚡", "مبلط 🧱"],
+        ["صيانة غسالات 🧼"],
+        ["🔙 رجوع للقائمة الرئيسية"]
+    ],
+    resize_keyboard=True,
+)
+
 DOCTORS_MARKUP = InlineKeyboardMarkup([
     [InlineKeyboardButton("طب وجراحة الفم والأسنان 🦷", callback_data="doc_dentist")],
     [InlineKeyboardButton("العلاج الطبيعي والتغذية 🦾", callback_data="doc_physio")],
@@ -682,6 +693,7 @@ logger = logging.getLogger(__name__)
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     conn.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, joined_at TEXT, last_seen TEXT)")
+    conn.execute("CREATE TABLE IF NOT EXISTS workers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, craft TEXT, phone TEXT)")
     
     # ترقية قاعدة البيانات الحالية بشكل آمن
     cursor = conn.cursor()
@@ -713,6 +725,35 @@ def update_activity(user_id: int):
         conn.execute("INSERT INTO users (user_id, joined_at, last_seen) VALUES (?, ?, ?)", (user_id, today, today))
     conn.commit()
     conn.close()
+
+def save_worker_to_db(name, craft, phone):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute("INSERT INTO workers (name, craft, phone) VALUES (?, ?, ?)", (name, craft, phone))
+        conn.commit()
+        conn.close()
+        logger.info(f"Worker {name} ({craft}) saved to database.")
+    except Exception as e:
+        logger.error(f"Error saving worker to db: {e}")
+
+def get_db_workers(craft_key):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT name, phone FROM workers WHERE craft = ?", (craft_key,))
+        rows = cursor.fetchall()
+        conn.close()
+        if not rows:
+            return ""
+        
+        extra_text = "\n\n• *فنيين إضافيين تم تسجيلهم عبر البوت:*"
+        for row in rows:
+            name, phone = row[0], row[1]
+            extra_text += f"\n\n  • 🛠️ {name}\n    📞 رقم التواصل: {phone}"
+        return extra_text
+    except Exception as e:
+        logger.error(f"Error reading workers from db: {e}")
+        return ""
 
 def register_user(user_id: int):
     update_activity(user_id)
@@ -920,15 +961,43 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         context.user_data["choice"] = "إضافة طبيب"
         return WAITING_FOR_REQUEST_DETAILS
 
-    elif "إضافة صنايعي" in text:
+    elif "إضافة صنايعي" in text and not any(c in text for c in ["نجار", "نقاش", "كهربائي", "مبلط", "غسالات"]):
         await update.message.reply_text(
-            "📝 يرجى إدخال تفاصيل الحرفة الخاصة بك في رسالة واحدة كالتالي:\n\n"
-            "1. الاسم:\n"
-            "2. الحرفة (نجار، كهربائي، إلخ):\n"
-            "3. رقم التواصل:\n\n"
-            "سيتم مراجعة طلبك ونشره في القناة فور موافقة الإدارة. ✅"
+            "اختر الحرفة الخاصة بك من القائمة بالأسفل لتصنيفها بشكل صحيح داخل البوت:",
+            reply_markup=ADD_WORKER_CRAFT_KEYBOARD
         )
         context.user_data["choice"] = "إضافة صنايعي"
+        return ConversationHandler.END
+
+    elif any(c in text for c in ["نجار", "نقاش", "كهربائي", "مبلط", "غسالات"]) and "إضافة" in context.user_data.get("choice", ""):
+        craft_key = "work_wood"
+        craft_name = "نجار"
+        if "نجار" in text:
+            craft_key = "work_wood"
+            craft_name = "نجار"
+        elif "نقاش" in text:
+            craft_key = "work_paint"
+            craft_name = "نقاش"
+        elif "كهربائي" in text:
+            craft_key = "work_elec"
+            craft_name = "كهربائي"
+        elif "مبلط" in text:
+            craft_key = "work_ceramic"
+            craft_name = "مبلط"
+        elif "غسالات" in text:
+            craft_key = "work_washing_machine"
+            craft_name = "صيانة غسالات"
+
+        context.user_data["temp_craft_key"] = craft_key
+        context.user_data["temp_craft_name"] = craft_name
+
+        await update.message.reply_text(
+            f"📝 يرجى إدخال بياناتك كـ ({craft_name}) في رسالة واحدة كالتالي:\n\n"
+            "1. الاسم:\n"
+            "2. رقم التواصل:\n\n"
+            "سيتم مراجعة طلبك وإضافته لقسم الصنايعية ونشره في القناة فور موافقة الإدارة. ✅"
+        )
+        context.user_data["choice"] = f"إضافة صنايعي: {craft_name}"
         return WAITING_FOR_REQUEST_DETAILS
 
     elif "إضافة براند" in text:
@@ -1038,7 +1107,8 @@ async def process_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
              "مكتبة الوفاء", "دليل الصنايعية", "الجمعية الشرعية", "شكاوى", "مفقودات",
              "🚗 سيارات الطوارئ والمشاوير", "براند 🏷️", "براند", "🔙 رجوع للخدمات",
              "إضافة شغلك ➕", "إضافة شغلك", "إضافة طبيب/عيادة 🩺",
-             "إضافة صنايعي 🛠️", "إضافة براند 🏷️", "إضافة مطعم 🍔", "إضافة كابتن توصيل 🛵"]
+             "إضافة صنايعي 🛠️", "إضافة براند 🏷️", "إضافة مطعم 🍔", "إضافة كابتن توصيل 🛵",
+             "نجار 🪵", "نقاش 🎨", "كهربائي ⚡", "مبلط 🧱", "صيانة غسالات 🧼"]
              
     if user_text in KNOWN:
         context.user_data.clear()
@@ -1080,6 +1150,37 @@ async def process_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         elif "إضافة صنايعي" in choice:
             action_code = "add_worker"
             action_name = "طلب إضافة صنايعي"
+            
+            craft_key = context.user_data.get("temp_craft_key", "work_wood")
+            craft_name = context.user_data.get("temp_craft_name", "نجار")
+            
+            name = ""
+            phone = ""
+            for line in user_text.split("\n"):
+                if "الاسم" in line:
+                    name = line.split("الاسم:")[-1].strip().replace("•", "").strip()
+                elif "التواصل" in line or "الهاتف" in line or "التليفون" in line or "رقم" in line:
+                    phone = line.split(":")[-1].strip().replace("•", "").strip()
+            
+            if not name or not phone:
+                lines = [l.strip() for l in user_text.split("\n") if l.strip()]
+                if len(lines) >= 2:
+                    if not name:
+                        name = lines[0]
+                    if not phone:
+                        phone = lines[1]
+            
+            if not name:
+                name = "فني غير مسمى"
+            if not phone:
+                phone = user_text.strip()
+                
+            req_data_key = f"worker_data_{user.id}"
+            context.bot_data[req_data_key] = {
+                "name": name,
+                "phone": phone,
+                "craft": craft_key
+            }
         elif "إضافة براند" in choice:
             action_code = "add_brand"
             action_name = "طلب إضافة براند"
@@ -1177,7 +1278,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     if data in WORK_TEXT_MAP:
-        await query.message.reply_text(WORK_TEXT_MAP[data], parse_mode="Markdown", reply_markup=BACK_WORKERS_BTN, disable_web_page_preview=True)
+        extra_workers = get_db_workers(data)
+        full_text = WORK_TEXT_MAP[data] + extra_workers
+        await query.message.reply_text(full_text, parse_mode="Markdown", reply_markup=BACK_WORKERS_BTN, disable_web_page_preview=True)
         return
 
     if data == "back_doctors":
@@ -1268,6 +1371,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         elif action == "add_worker":
             markup = InlineKeyboardMarkup([[InlineKeyboardButton("تواصل مع الصنايعي 📞", url=contact_url)]])
             text_to_send = f"🛠️ *صنايعي/حرفة جديدة بالبلاشون*\n\n{details}\n\n🤖 للتواصل عبر البوت: t.me/AlBalashon\\_services\\_bot"
+            
+            # Save worker to db
+            req_data_key = f"worker_data_{user_id}"
+            worker_data = context.bot_data.pop(req_data_key, None)
+            if worker_data:
+                save_worker_to_db(worker_data["name"], worker_data["craft"], worker_data["phone"])
         elif action == "add_brand":
             markup = InlineKeyboardMarkup([[InlineKeyboardButton("تواصل مع صاحب البراند 💬", url=contact_url)]])
             text_to_send = f"🏷️ *براند جديد بالبلاشون*\n\n{details}\n\n🤖 للتواصل عبر البوت: t.me/AlBalashon\\_services\\_bot"
@@ -1374,9 +1483,13 @@ async def send_daily_azkar(context: ContextTypes.DEFAULT_TYPE):
     context.bot_data["last_morning_date"] = now_date_str
 
     azkar_text = (
-        "☀️ *أذكار الصباح | بنية فتح الأبواب والبركة* ☀️\n\n"
-        "- سبحان الله\n- الحمد لله\n- لا إله إلا الله\n"
-        "- صلى الله على محمد، صلى الله عليه وسلم (صلِّ على رسول الله)"
+        "☀️ *أذكار الصباح* ☀️\n\n"
+        "🔹 *[ثلاث مرات]:*\n"
+        "سبحان الله وبحمده عدد خلقه، ورضى نفسه، وزنة عرشه، ومداد كلماته.\n"
+        "_(رواه مسلم)_\n\n"
+        "🔹 *[مرة واحدة]:*\n"
+        "اصبحنا واصبح الملك لله، والحمدُ لله، لا إله إلا الله وحده لا شريك له، له الملكُ وله الحمدُ وهو على كل شيءٍ قدير، ربِّ أسألك خير ما في هذا اليوم وخير ما بعده، وأعوذُ بك من شرِّ ما في هذا اليوم وشرِّ ما بعده، ربِّ أعوذُ بك من الكسل وسُوءِ الكِبَر، ربِّ أعوذُ بك من عذابٍ في النار وعذابٍ في القبر.\n"
+        "_(رواه مسلم)_"
     )
     try: await context.bot.send_message(CHANNEL_ID, azkar_text, parse_mode="Markdown")
     except Exception: pass
