@@ -156,7 +156,8 @@ UROLOGY_DERMA_TEXT = textwrap.dedent("""\
     ----------------------------------------
 
     • 👨‍⚕️ د/ أسامة الجندي (مسالك بولية)
-      📅 المواعيد: يومياً عدا الجمعة (من 5:00 مساءً لـ 11:00 مساءً).
+      📅 المواعيد: السبت والاتنين والأربع والجمعة من 6:00 مساءً لـ 11:00 مساءً.
+      📞 0552802394 - 01008499653
 
     • 👨‍⚕️ د/ عبد الرحمن (الجلدية)
       📍 العنوان: عمارة الأطباء.
@@ -629,6 +630,18 @@ ADD_WORKER_CRAFT_KEYBOARD = ReplyKeyboardMarkup(
     resize_keyboard=True,
 )
 
+ADD_DOCTOR_SPECIALTY_KEYBOARD = ReplyKeyboardMarkup(
+    [
+        ["طب وجراحة الفم والأسنان 🦷", "العلاج الطبيعي والتغذية 🦾"],
+        ["الباطنة والقلب والصدر 🫁", "أمراض النساء والتوليد 🤰"],
+        ["الأنف والأذن والحنجرة 👂", "مخ وأعصاب وجراحة عامة 🧠"],
+        ["المسالك البولية والجلدية 🩸", "مراكز الأشعة والتحاليل 🔬"],
+        ["طب الأطفال وحديثي الولادة 👶", "عيادات الفتح التخصصية 🏛️"],
+        ["🔙 رجوع للقائمة الرئيسية"]
+    ],
+    resize_keyboard=True,
+)
+
 DOCTORS_MARKUP = InlineKeyboardMarkup([
     [InlineKeyboardButton("طب وجراحة الفم والأسنان 🦷", callback_data="doc_dentist")],
     [InlineKeyboardButton("العلاج الطبيعي والتغذية 🦾", callback_data="doc_physio")],
@@ -913,7 +926,8 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             return ConversationHandler.END
             
         elif action == "admin_add_doctor_details":
-            execute_query("INSERT INTO department_additions (category, details) VALUES (%s, %s)", ("doctor", text.strip()))
+            spec = context.user_data.pop("admin_add_doctor_spec", "doc_dentist")
+            execute_query("INSERT INTO department_additions (category, details) VALUES (%s, %s)", (spec, text.strip()))
             keyboard = [[InlineKeyboardButton("🔙 رجوع لإدارة الأطباء", callback_data="adm_manage_doctors")]]
             await update.message.reply_text("✅ تم إضافة الطبيب بنجاح إلى القسم.", reply_markup=InlineKeyboardMarkup(keyboard))
             return ConversationHandler.END
@@ -971,8 +985,7 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return ConversationHandler.END
 
     if "دليل الأطباء" in text:
-        extra = get_db_additions("doctor")
-        await update.message.reply_text(DOCTORS_TEXT + extra, parse_mode="Markdown", reply_markup=DOCTORS_MARKUP, disable_web_page_preview=True)
+        await update.message.reply_text(DOCTORS_TEXT, parse_mode="Markdown", reply_markup=DOCTORS_MARKUP, disable_web_page_preview=True)
         return ConversationHandler.END
 
     if "مصمم البوت" in text:
@@ -1067,12 +1080,8 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
     elif "إضافة طبيب/عيادة" in text:
         await update.message.reply_text(
-            "📝 يرجى إدخال تفاصيل العيادة/الطبيب في رسالة واحدة كالتالي:\n\n"
-            "1. اسم الطبيب والتخصص:\n"
-            "2. العنوان بالتفصيل:\n"
-            "3. المواعيد:\n"
-            "4. رقم التواصل:\n\n"
-            "سيتم مراجعة طلبك وإضافته لقسم الأطباء فور موافقة الإدارة. ✅"
+            "اختر التخصص الطبي الخاص بك من القائمة بالأسفل لتصنيفه بشكل صحيح:",
+            reply_markup=ADD_DOCTOR_SPECIALTY_KEYBOARD
         )
         context.user_data["choice"] = "إضافة طبيب"
         return WAITING_FOR_REQUEST_DETAILS
@@ -1203,6 +1212,49 @@ async def process_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     user      = update.effective_user
     username  = f"@{user.username}" if user.username else str(user.id)
 
+    # ─── التحقق من مرحلة اختيار التخصص الطبي أولاً ───
+    if choice == "إضافة طبيب":
+        specialties_map = {
+            "طب وجراحة الفم والأسنان": "doc_dentist",
+            "العلاج الطبيعي والتغذية": "doc_physio",
+            "الباطنة والقلب والصدر": "doc_internal",
+            "أمراض النساء والتوليد": "doc_obgyn",
+            "الأنف والأذن والحنجرة": "doc_ent",
+            "مخ وأعصاب وجراحة عامة": "doc_neuro_surgery",
+            "المسالك البولية والجلدية": "doc_uro_derma",
+            "مراكز الأشعة والتحاليل": "doc_xray_labs",
+            "طب الأطفال وحديثي الولادة": "doc_pediatrics",
+            "عيادات الفتح التخصصية": "alfath_clinics"
+        }
+        matched_key = None
+        matched_name = None
+        for name, key in specialties_map.items():
+            if name in user_text:
+                matched_key = key
+                matched_name = name
+                break
+        
+        if matched_key:
+            context.user_data["temp_doctor_specialty"] = matched_key
+            context.user_data["temp_doctor_specialty_name"] = matched_name
+            context.user_data["choice"] = f"إضافة طبيب: {matched_name}"
+            
+            await update.message.reply_text(
+                f"📝 يرجى إدخال تفاصيل العيادة/الطبيب في رسالة واحدة كالتالي:\n\n"
+                "1. اسم الطبيب والتخصص:\n"
+                "2. العنوان بالتفصيل:\n"
+                "3. المواعيد:\n"
+                "4. رقم التواصل:\n\n"
+                "سيتم مراجعة طلبك وإضافته لقسم الأطباء فور موافقة الإدارة. ✅"
+            )
+            return WAITING_FOR_REQUEST_DETAILS
+        else:
+            await update.message.reply_text(
+                "⚠️ عذراً، يرجى اختيار التخصص الطبي الخاص بك من القائمة بالأسفل أولاً لتصنيفه بشكل صحيح:",
+                reply_markup=ADD_DOCTOR_SPECIALTY_KEYBOARD
+            )
+            return WAITING_FOR_REQUEST_DETAILS
+
     # ─── التحقق من مرحلة اختيار الحرفة أولاً ───
     if choice == "إضافة صنايعي":
         if any(c in user_text for c in ["نجار", "نقاش", "كهربائي", "مبلط", "غسالات"]):
@@ -1271,6 +1323,11 @@ async def process_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         elif "إضافة طبيب" in choice:
             action_code = "add_doctor"
             action_name = "طلب إضافة طبيب/عيادة"
+            specialty_key = context.user_data.get("temp_doctor_specialty", "doc_dentist")
+            req_data_key = f"doctor_data_{user.id}"
+            context.bot_data[req_data_key] = {
+                "specialty": specialty_key
+            }
         elif "إضافة صنايعي" in choice:
             action_code = "add_worker"
             action_name = "طلب إضافة صنايعي"
@@ -1475,14 +1532,33 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         elif data == "adm_manage_doctors":
             keyboard = [
                 [InlineKeyboardButton("➕ إضافة طبيب يدوياً", callback_data="adm_add_doctor_direct")],
-                [InlineKeyboardButton("❌ عرض وحذف طبيب", callback_data="adm_del_addlist_doctor")],
+                [InlineKeyboardButton("❌ عرض وحذف طبيب", callback_data="adm_del_docspec_select")],
                 [InlineKeyboardButton("🔙 رجوع للقائمة الرئيسية", callback_data="adm_back_menu")]
             ]
             await query.edit_message_text("🩺 *إدارة قسم الأطباء والعيادات:*", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
             return
             
         elif data == "adm_add_doctor_direct":
+            keyboard = [
+                [InlineKeyboardButton("طب وجراحة الفم والأسنان 🦷", callback_data="adm_add_docspec_doc_dentist")],
+                [InlineKeyboardButton("العلاج الطبيعي والتغذية 🦾", callback_data="adm_add_docspec_doc_physio")],
+                [InlineKeyboardButton("الباطنة والقلب والصدر 🫁", callback_data="adm_add_docspec_doc_internal")],
+                [InlineKeyboardButton("أمراض النساء والتوليد 🤰", callback_data="adm_add_docspec_doc_obgyn")],
+                [InlineKeyboardButton("الأنف والأذن والحنجرة 👂", callback_data="adm_add_docspec_doc_ent")],
+                [InlineKeyboardButton("مخ وأعصاب وجراحة عامة 🧠", callback_data="adm_add_docspec_doc_neuro_surgery")],
+                [InlineKeyboardButton("المسالك البولية والجلدية 🩸", callback_data="adm_add_docspec_doc_uro_derma")],
+                [InlineKeyboardButton("مراكز الأشعة والتحاليل 🔬", callback_data="adm_add_docspec_doc_xray_labs")],
+                [InlineKeyboardButton("طب الأطفال وحديثي الولادة 👶", callback_data="adm_add_docspec_doc_pediatrics")],
+                [InlineKeyboardButton("عيادات الفتح التخصصية 🏛️", callback_data="adm_add_docspec_alfath_clinics")],
+                [InlineKeyboardButton("🔙 رجوع", callback_data="adm_manage_doctors")]
+            ]
+            await query.edit_message_text("اختر التخصص الطبي لإضافة الطبيب الجديد فيه:", reply_markup=InlineKeyboardMarkup(keyboard))
+            return
+            
+        elif data.startswith("adm_add_docspec_"):
+            spec_key = data.replace("adm_add_docspec_", "")
             context.user_data["admin_action"] = "admin_add_doctor_details"
+            context.user_data["admin_add_doctor_spec"] = spec_key
             await query.edit_message_text(
                 "📝 يرجى إرسال تفاصيل الطبيب/العيادة في رسالة واحدة كالتالي:\n\n"
                 "1. اسم الطبيب والتخصص:\n"
@@ -1490,6 +1566,23 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 "3. المواعيد:\n"
                 "4. رقم التواصل:"
             )
+            return
+            
+        elif data == "adm_del_docspec_select":
+            keyboard = [
+                [InlineKeyboardButton("طب وجراحة الفم والأسنان 🦷", callback_data="adm_del_addlist_doc_dentist")],
+                [InlineKeyboardButton("العلاج الطبيعي والتغذية 🦾", callback_data="adm_del_addlist_doc_physio")],
+                [InlineKeyboardButton("الباطنة والقلب والصدر 🫁", callback_data="adm_del_addlist_doc_internal")],
+                [InlineKeyboardButton("أمراض النساء والتوليد 🤰", callback_data="adm_del_addlist_doc_obgyn")],
+                [InlineKeyboardButton("الأنف والأذن والحنجرة 👂", callback_data="adm_del_addlist_doc_ent")],
+                [InlineKeyboardButton("مخ وأعصاب وجراحة عامة 🧠", callback_data="adm_del_addlist_doc_neuro_surgery")],
+                [InlineKeyboardButton("المسالك البولية والجلدية 🩸", callback_data="adm_del_addlist_doc_uro_derma")],
+                [InlineKeyboardButton("مراكز الأشعة والتحاليل 🔬", callback_data="adm_del_addlist_doc_xray_labs")],
+                [InlineKeyboardButton("طب الأطفال وحديثي الولادة 👶", callback_data="adm_del_addlist_doc_pediatrics")],
+                [InlineKeyboardButton("عيادات الفتح التخصصية 🏛️", callback_data="adm_del_addlist_alfath_clinics")],
+                [InlineKeyboardButton("🔙 رجوع", callback_data="adm_manage_doctors")]
+            ]
+            await query.edit_message_text("اختر التخصص لعرض الأطباء وحذف طبيب محدد:", reply_markup=InlineKeyboardMarkup(keyboard))
             return
             
         # ─── 3. إدارة البراندات ───
@@ -1579,13 +1672,19 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             cat = data.replace("adm_del_addlist_", "")
             rows, _ = fetch_query("SELECT id, details FROM department_additions WHERE category = %s", (cat,))
             
-            back_map = {
-                "doctor": "adm_manage_doctors",
-                "brand": "adm_manage_brands",
-                "restaurant": "adm_manage_restaurants",
-                "captain": "adm_manage_captains"
-            }
-            back_cb = back_map.get(cat, "adm_back_menu")
+            doctor_specialties = [
+                "doc_dentist", "doc_physio", "doc_internal", "doc_obgyn", "doc_ent",
+                "doc_neuro_surgery", "doc_uro_derma", "doc_xray_labs", "doc_pediatrics", "alfath_clinics"
+            ]
+            if cat in doctor_specialties:
+                back_cb = "adm_del_docspec_select"
+            else:
+                back_map = {
+                    "brand": "adm_manage_brands",
+                    "restaurant": "adm_manage_restaurants",
+                    "captain": "adm_manage_captains"
+                }
+                back_cb = back_map.get(cat, "adm_back_menu")
             
             if not rows:
                 keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data=back_cb)]]
@@ -1604,16 +1703,22 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         elif data.startswith("adm_del_additem_"):
             item_id = int(data.replace("adm_del_additem_", ""))
             rows, _ = fetch_query("SELECT category FROM department_additions WHERE id = %s", (item_id,))
-            cat = rows[0][0] if rows else "doctor"
+            cat = rows[0][0] if rows else "doc_dentist"
             execute_query("DELETE FROM department_additions WHERE id = %s", (item_id,))
             
-            back_map = {
-                "doctor": "adm_manage_doctors",
-                "brand": "adm_manage_brands",
-                "restaurant": "adm_manage_restaurants",
-                "captain": "adm_manage_captains"
-            }
-            back_cb = back_map.get(cat, "adm_back_menu")
+            doctor_specialties = [
+                "doc_dentist", "doc_physio", "doc_internal", "doc_obgyn", "doc_ent",
+                "doc_neuro_surgery", "doc_uro_derma", "doc_xray_labs", "doc_pediatrics", "alfath_clinics"
+            ]
+            if cat in doctor_specialties:
+                back_cb = "adm_del_docspec_select"
+            else:
+                back_map = {
+                    "brand": "adm_manage_brands",
+                    "restaurant": "adm_manage_restaurants",
+                    "captain": "adm_manage_captains"
+                }
+                back_cb = back_map.get(cat, "adm_back_menu")
             
             keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data=back_cb)]]
             await query.edit_message_text("✅ تم حذف العنصر من قاعدة البيانات بنجاح.", reply_markup=InlineKeyboardMarkup(keyboard))
@@ -1663,7 +1768,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 [InlineKeyboardButton("💬 تواصل مباشر (واتساب)", url="https://wa.me/201091590054")],
                 [InlineKeyboardButton("🔙 رجوع للتخصصات", callback_data="back_doctors")]
             ])
-        await query.message.reply_text(DOC_TEXT_MAP[data], parse_mode="Markdown", reply_markup=markup, disable_web_page_preview=True)
+        extra = get_db_additions(data)
+        await query.message.reply_text(DOC_TEXT_MAP[data] + extra, parse_mode="Markdown", reply_markup=markup, disable_web_page_preview=True)
         return
 
     if data in WORK_TEXT_MAP:
@@ -1673,8 +1779,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     if data == "back_doctors":
-        extra = get_db_additions("doctor")
-        await query.message.edit_text(DOCTORS_TEXT + extra, parse_mode="Markdown", reply_markup=DOCTORS_MARKUP)
+        await query.message.edit_text(DOCTORS_TEXT, parse_mode="Markdown", reply_markup=DOCTORS_MARKUP)
         return
 
     if data == "back_workers":
@@ -1784,9 +1889,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     worker_data = context.bot_data.pop(req_data_key, None)
                     if worker_data:
                         save_worker_to_db(worker_data["name"], worker_data["craft"], worker_data["phone"])
+                elif action == "add_doctor":
+                    req_data_key = f"doctor_data_{user_id}"
+                    doc_data = context.bot_data.pop(req_data_key, None)
+                    spec = doc_data["specialty"] if doc_data else "doc_dentist"
+                    execute_query("INSERT INTO department_additions (category, details) VALUES (%s, %s)", (spec, details))
                 else:
                     cat_map = {
-                        "add_doctor": "doctor",
                         "add_brand": "brand",
                         "add_restaurant": "restaurant",
                         "add_captain": "captain"
