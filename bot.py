@@ -427,12 +427,10 @@ STAR_METAL_TEXT = textwrap.dedent("""\
     👤 *صاحب المعرض:* محمود عبدالعظيم سعد
     📞 *رقم التواصل:* 01014770786""")
 
-TUKTUK_TEXT = textwrap.dedent("""\
-    🛺 *دليل سائقي التوك توك بالبلاشون:*
+LESSONS_TEXT = textwrap.dedent("""\
+    📚 *دليل الدروس والمدرسين بالبلاشون:*
 
-    👤 *الطالب:* كريم عماد
-    • السن: 19 سنة
-    📞 *رقم التواصل:* 01090305795
+    يرجى اختيار القسم المطلوب من الأسفل لعرض المدرسين وأرقام التواصل:
 """)
 
 WORKERS_TEXT = textwrap.dedent("""\
@@ -577,7 +575,7 @@ MAIN_KEYBOARD = ReplyKeyboardMarkup(
         ["self care ✨", "🚕 مشاركة المشاوير والمواصلات"],
         ["💼 وظائف خالية", "🛠️ الخدمات"],
         ["🩺 دليل الأطباء والعيادات", "الجمعية الشرعية 🏛️"],
-        ["🛺 اطلب توك توك", "💻 مصمم البوت"]
+        ["الدروس 📚", "💻 مصمم البوت"]
     ],
     resize_keyboard=True,
 )
@@ -614,7 +612,7 @@ ADD_WORK_KEYBOARD = ReplyKeyboardMarkup(
     [
         ["إضافة طبيب/عيادة 🩺", "إضافة صنايعي 🛠️"],
         ["إضافة براند 🏷️", "إضافة مطعم 🍔"],
-        ["إضافة كابتن توصيل 🛵"],
+        ["إضافة كابتن توصيل 🛵", "إضافة مدرس 📚"],
         ["🔙 رجوع للقائمة الرئيسية"]
     ],
     resize_keyboard=True,
@@ -763,6 +761,11 @@ def init_db():
         cursor.execute("CREATE TABLE IF NOT EXISTS users (user_id BIGINT PRIMARY KEY, joined_at VARCHAR(100), last_seen VARCHAR(100))")
         cursor.execute("CREATE TABLE IF NOT EXISTS workers (id SERIAL PRIMARY KEY, name VARCHAR(255), craft VARCHAR(255), phone VARCHAR(100))")
         cursor.execute("CREATE TABLE IF NOT EXISTS department_additions (id SERIAL PRIMARY KEY, category VARCHAR(50), details TEXT)")
+        cursor.execute("CREATE TABLE IF NOT EXISTS lesson_categories (id SERIAL PRIMARY KEY, name VARCHAR(255) UNIQUE)")
+        cursor.execute("SELECT COUNT(*) FROM lesson_categories")
+        if cursor.fetchone()[0] == 0:
+            for cat in ["علوم متكاملة", "عربي", "انجليزي", "رياضة"]:
+                cursor.execute("INSERT INTO lesson_categories (name) VALUES (%s) ON CONFLICT DO NOTHING", (cat,))
         pg_conn.commit()
         logger.info("PostgreSQL database initialized successfully.")
     except Exception as e:
@@ -777,6 +780,12 @@ def init_db():
         sqlite_conn.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, joined_at TEXT, last_seen TEXT)")
         sqlite_conn.execute("CREATE TABLE IF NOT EXISTS workers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, craft TEXT, phone TEXT)")
         sqlite_conn.execute("CREATE TABLE IF NOT EXISTS department_additions (id INTEGER PRIMARY KEY AUTOINCREMENT, category TEXT, details TEXT)")
+        sqlite_conn.execute("CREATE TABLE IF NOT EXISTS lesson_categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE)")
+        cursor = sqlite_conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM lesson_categories")
+        if cursor.fetchone()[0] == 0:
+            for cat in ["علوم متكاملة", "عربي", "انجليزي", "رياضة"]:
+                cursor.execute("INSERT OR IGNORE INTO lesson_categories (name) VALUES (?)", (cat,))
         sqlite_conn.commit()
         sqlite_conn.close()
         logger.info("SQLite database initialized successfully.")
@@ -826,6 +835,29 @@ def get_db_additions(category: str) -> str:
     except Exception as e:
         logger.error(f"Error reading additions from db: {e}")
         return ""
+
+def get_lesson_categories():
+    try:
+        rows, _ = fetch_query("SELECT name FROM lesson_categories ORDER BY id ASC")
+        return [row[0] for row in rows]
+    except Exception as e:
+        logger.error(f"Error fetching lesson categories: {e}")
+        return ["علوم متكاملة", "عربي", "انجليزي", "رياضة"]
+
+def get_lessons_markup():
+    cats = get_lesson_categories()
+    keyboard = []
+    # Grid of 2 columns
+    for i in range(0, len(cats), 2):
+        row = []
+        row.append(InlineKeyboardButton(cats[i], callback_data=f"lesscat_{cats[i]}"))
+        if i + 1 < len(cats):
+            row.append(InlineKeyboardButton(cats[i+1], callback_data=f"lesscat_{cats[i+1]}"))
+        keyboard.append(row)
+    
+    # Add addition button for users
+    keyboard.append([InlineKeyboardButton("➕ إضافة مدرس", callback_data="add_teacher_start")])
+    return InlineKeyboardMarkup(keyboard)
 
 def register_user(user_id: int):
     update_activity(user_id)
@@ -905,9 +937,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 # ════════════════════════════════════════════
 async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.effective_user.id
+    text = update.message.text or ""
+    
+    # Redirect to process_input if they are in an active addition flow
+    interrupts = ["🚨 حالات عاجلة", "إضافة شغلك ➕", "self care ✨", "🚕 مشاركة المشاوير والمواصلات", "💼 وظائف خالية", "🛠️ الخدمات", "🩺 دليل الأطباء والعيادات", "الجمعية الشرعية 🏛️", "الدروس 📚", "💻 مصمم البوت", "🔙 رجوع للقائمة الرئيسية"]
+    if "choice" in context.user_data and context.user_data["choice"].startswith("إضافة") and text not in interrupts:
+        return await process_input(update, context)
+
     if user_id in ADMINS and "admin_action" in context.user_data:
         action = context.user_data.pop("admin_action")
-        text = update.message.text or ""
         
         if action == "admin_add_worker_name":
             context.user_data["admin_add_worker_name"] = text.strip()
@@ -948,6 +986,23 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             execute_query("INSERT INTO department_additions (category, details) VALUES (%s, %s)", ("captain", text.strip()))
             keyboard = [[InlineKeyboardButton("🔙 رجوع لإدارة الكباتن", callback_data="adm_manage_captains")]]
             await update.message.reply_text("✅ تم إضافة كابتن التوصيل بنجاح إلى القسم.", reply_markup=InlineKeyboardMarkup(keyboard))
+            return ConversationHandler.END
+
+        elif action == "admin_add_lesscat_name":
+            new_cat = text.strip()
+            if new_cat:
+                execute_query("INSERT INTO lesson_categories (name) VALUES (%s) ON CONFLICT DO NOTHING", (new_cat,))
+                keyboard = [[InlineKeyboardButton("🔙 رجوع لإدارة الدروس", callback_data="adm_manage_lessons")]]
+                await update.message.reply_text(f"✅ تم إضافة القسم الدراسي *{new_cat}* بنجاح.", parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+            else:
+                await update.message.reply_text("⚠️ اسم القسم غير صالح.")
+            return ConversationHandler.END
+
+        elif action == "admin_add_teacher_details":
+            cat_name = context.user_data.pop("admin_add_teacher_cat", "عربي")
+            execute_query("INSERT INTO department_additions (category, details) VALUES (%s, %s)", (f"lesson_{cat_name}", text.strip()))
+            keyboard = [[InlineKeyboardButton("🔙 رجوع لإدارة الدروس", callback_data="adm_manage_lessons")]]
+            await update.message.reply_text("✅ تم إضافة المدرس بنجاح إلى القسم.", reply_markup=InlineKeyboardMarkup(keyboard))
             return ConversationHandler.END
             
         elif action == "waiting_for_del_user_id":
@@ -995,11 +1050,8 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         await update.message.reply_text(DEVELOPER_TEXT, parse_mode="Markdown", reply_markup=developer_markup)
         return ConversationHandler.END
         
-    if "توك توك" in text:
-        tuktuk_markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("💬 تواصل مع كريم (واتساب)", url="https://wa.me/201090305795")]
-        ])
-        await update.message.reply_text(TUKTUK_TEXT, parse_mode="Markdown", reply_markup=tuktuk_markup)
+    if "الدروس" in text or "الدروس 📚" in text:
+        await update.message.reply_text(LESSONS_TEXT, parse_mode="Markdown", reply_markup=get_lessons_markup())
         return ConversationHandler.END
         
     elif "مطاعم" in text:
@@ -1127,6 +1179,23 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         context.user_data["choice"] = "إضافة كابتن"
         return WAITING_FOR_REQUEST_DETAILS
 
+    elif "إضافة مدرس" in text:
+        cats = get_lesson_categories()
+        keyboard = []
+        for i in range(0, len(cats), 2):
+            row = []
+            row.append(cats[i])
+            if i + 1 < len(cats):
+                row.append(cats[i+1])
+            keyboard.append(row)
+        keyboard.append(["🔙 رجوع للقائمة الرئيسية"])
+        await update.message.reply_text(
+            "اختر القسم الدراسي الخاص بك لتصنيفه بشكل صحيح:",
+            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        )
+        context.user_data["choice"] = "إضافة مدرس"
+        return WAITING_FOR_REQUEST_DETAILS
+
     elif "الشحن والتوصيل" in text:
         extra = get_db_additions("captain")
         await update.message.reply_text(DELIVERY_TEXT + extra, parse_mode="Markdown")
@@ -1197,12 +1266,13 @@ async def process_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
              "🩺 دليل الأطباء والعيادات", "🪟 معرض استار ميتال للألوميتال",
              "📦 خدمات الشحن والتوصيل (الطيارين)", "مكتبة الوفاء 📚", "دليل الصنايعية 🛠️",
              "مكتب السعد للمحاسبة والمراجعة ⚖️", "مكتب السعد", "الجمعية الشرعية 🏛️",
-             "🛺 اطلب توك توك", "💻 مصمم البوت", "🔙 رجوع للقائمة الرئيسية", 
+             "الدروس 📚", "الدروس", "💻 مصمم البوت", "🔙 رجوع للقائمة الرئيسية", 
              "🚕 مشاركة المشاوير", "🛠 الخدمات", "🍔 مطاعم", "🏟️ حجز ملعب البلاشون",
              "مكتبة الوفاء", "دليل الصنايعية", "الجمعية الشرعية", "شكاوى", "مفقودات",
              "🚗 سيارات الطوارئ والمشاوير", "براند 🏷️", "براند", "🔙 رجوع للخدمات",
              "إضافة شغلك ➕", "إضافة شغلك", "إضافة طبيب/عيادة 🩺",
-             "إضافة صنايعي 🛠️", "إضافة براند 🏷️", "إضافة مطعم 🍔", "إضافة كابتن توصيل 🛵"]
+             "إضافة صنايعي 🛠️", "إضافة براند 🏷️", "إضافة مطعم 🍔", "إضافة كابتن توصيل 🛵",
+             "إضافة مدرس 📚", "إضافة مدرس"]
              
     if user_text in KNOWN:
         context.user_data.clear()
@@ -1211,6 +1281,42 @@ async def process_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     choice    = context.user_data.get("choice", "")
     user      = update.effective_user
     username  = f"@{user.username}" if user.username else str(user.id)
+
+    # ─── التحقق من اختيار القسم الدراسي أولاً ───
+    if choice == "إضافة مدرس":
+        cats = get_lesson_categories()
+        matched_cat = None
+        for cat in cats:
+            if cat in user_text:
+                matched_cat = cat
+                break
+        
+        if matched_cat:
+            context.user_data["temp_teacher_cat"] = matched_cat
+            context.user_data["choice"] = f"إضافة مدرس: {matched_cat}"
+            
+            await update.message.reply_text(
+                f"📝 يرجى إدخال تفاصيل المدرس في رسالة واحدة كالتالي:\n\n"
+                "1. اسم المدرس:\n"
+                "2. الوصف/المادة والصف:\n"
+                "3. رقم الموبايل:\n\n"
+                "سيتم مراجعة طلبك وإضافته لقسم المدرسين فور موافقة الإدارة. ✅"
+            )
+            return WAITING_FOR_REQUEST_DETAILS
+        else:
+            keyboard = []
+            for i in range(0, len(cats), 2):
+                row = []
+                row.append(cats[i])
+                if i + 1 < len(cats):
+                    row.append(cats[i+1])
+                keyboard.append(row)
+            keyboard.append(["🔙 رجوع للقائمة الرئيسية"])
+            await update.message.reply_text(
+                "⚠️ عذراً، يرجى اختيار القسم الدراسي الخاص بك من القائمة بالأسفل أولاً لتصنيفه بشكل صحيح:",
+                reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+            )
+            return WAITING_FOR_REQUEST_DETAILS
 
     # ─── التحقق من مرحلة اختيار التخصص الطبي أولاً ───
     if choice == "إضافة طبيب":
@@ -1328,6 +1434,14 @@ async def process_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             context.bot_data[req_data_key] = {
                 "specialty": specialty_key
             }
+        elif "إضافة مدرس" in choice:
+            action_code = "add_teacher"
+            action_name = "طلب إضافة مدرس"
+            teacher_cat = context.user_data.get("temp_teacher_cat", "عربي")
+            req_data_key = f"teacher_data_{user.id}"
+            context.bot_data[req_data_key] = {
+                "category": teacher_cat
+            }
         elif "إضافة صنايعي" in choice:
             action_code = "add_worker"
             action_name = "طلب إضافة صنايعي"
@@ -1428,6 +1542,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             keyboard = [
                 [InlineKeyboardButton("🛠️ إدارة الفنيين (الصنايعية)", callback_data="adm_manage_workers")],
                 [InlineKeyboardButton("🩺 إدارة الأطباء والعيادات", callback_data="adm_manage_doctors")],
+                [InlineKeyboardButton("📚 إدارة الدروس والمدرسين", callback_data="adm_manage_lessons")],
                 [InlineKeyboardButton("🏷️ إدارة البراندات والمنتجات", callback_data="adm_manage_brands")],
                 [InlineKeyboardButton("🍔 إدارة المطاعم والأكلات", callback_data="adm_manage_restaurants")],
                 [InlineKeyboardButton("🛵 إدارة كباتن التوصيل", callback_data="adm_manage_captains")],
@@ -1644,6 +1759,96 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 "3. رقم التواصل:"
             )
             return
+
+        # ─── 5.5. إدارة الدروس ───
+        elif data == "adm_manage_lessons":
+            keyboard = [
+                [InlineKeyboardButton("➕ إضافة قسم جديد", callback_data="adm_add_lesscat")],
+                [InlineKeyboardButton("❌ حذف قسم بالكامل", callback_data="adm_del_lesscat_select")],
+                [InlineKeyboardButton("➕ إضافة مدرس يدوياً", callback_data="adm_add_teacher_direct")],
+                [InlineKeyboardButton("❌ عرض وحذف مدرس", callback_data="adm_del_teacher_select")],
+                [InlineKeyboardButton("🔙 رجوع للقائمة الرئيسية", callback_data="adm_back_menu")]
+            ]
+            await query.edit_message_text("📚 *إدارة قسم الدروس والمدرسين:*", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+            return
+
+        elif data == "adm_add_lesscat":
+            context.user_data["admin_action"] = "admin_add_lesscat_name"
+            await query.edit_message_text("📝 يرجى إرسال اسم القسم الدراسي الجديد في الرسالة التالية (مثال: فيزياء):")
+            return
+
+        elif data == "adm_del_lesscat_select":
+            cats = get_lesson_categories()
+            keyboard = []
+            for cat in cats:
+                keyboard.append([InlineKeyboardButton(f"❌ {cat}", callback_data=f"adm_del_lesscat_{cat}")])
+            keyboard.append([InlineKeyboardButton("🔙 رجوع", callback_data="adm_manage_lessons")])
+            await query.edit_message_text("⚠️ اختر القسم الذي تريد حذفه بالكامل (سيتم حذف جميع مدرسيه أيضاً):", reply_markup=InlineKeyboardMarkup(keyboard))
+            return
+
+        elif data.startswith("adm_del_lesscat_"):
+            cat_name = data.replace("adm_del_lesscat_", "")
+            execute_query("DELETE FROM lesson_categories WHERE name = %s", (cat_name,))
+            execute_query("DELETE FROM department_additions WHERE category = %s", (f"lesson_{cat_name}",))
+            keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="adm_manage_lessons")]]
+            await query.edit_message_text(f"✅ تم حذف قسم *{cat_name}* وجميع مدرسيه بنجاح.", parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+            return
+
+        elif data == "adm_add_teacher_direct":
+            cats = get_lesson_categories()
+            keyboard = []
+            for cat in cats:
+                keyboard.append([InlineKeyboardButton(cat, callback_data=f"adm_add_teachdirect_{cat}")])
+            keyboard.append([InlineKeyboardButton("🔙 رجوع", callback_data="adm_manage_lessons")])
+            await query.edit_message_text("اختر القسم الدراسي لإضافة المدرس الجديد فيه:", reply_markup=InlineKeyboardMarkup(keyboard))
+            return
+
+        elif data.startswith("adm_add_teachdirect_"):
+            cat_name = data.replace("adm_add_teachdirect_", "")
+            context.user_data["admin_action"] = "admin_add_teacher_details"
+            context.user_data["admin_add_teacher_cat"] = cat_name
+            await query.edit_message_text(
+                f"📝 يرجى إرسال تفاصيل المدرس للقسم ({cat_name}) كرسالة واحدة كالتالي:\n\n"
+                "1. اسم المدرس:\n"
+                "2. الوصف/المادة والصف:\n"
+                "3. رقم الموبايل:"
+            )
+            return
+
+        elif data == "adm_del_teacher_select":
+            cats = get_lesson_categories()
+            keyboard = []
+            for cat in cats:
+                keyboard.append([InlineKeyboardButton(cat, callback_data=f"adm_del_teachspec_{cat}")])
+            keyboard.append([InlineKeyboardButton("🔙 رجوع", callback_data="adm_manage_lessons")])
+            await query.edit_message_text("اختر القسم لعرض المدرسين وحذف مدرس محدد:", reply_markup=InlineKeyboardMarkup(keyboard))
+            return
+
+        elif data.startswith("adm_del_teachspec_"):
+            cat_name = data.replace("adm_del_teachspec_", "")
+            rows, _ = fetch_query("SELECT id, details FROM department_additions WHERE category = %s", (f"lesson_{cat_name}",))
+            if not rows:
+                keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="adm_del_teacher_select")]]
+                await query.edit_message_text("⚠️ لا توجد مدرسون مسجلون في هذا القسم حالياً.", reply_markup=InlineKeyboardMarkup(keyboard))
+                return
+            keyboard = []
+            for row in rows:
+                item_id, details = row[0], row[1]
+                short_text = details.replace("\n", " ")[:25] + "..."
+                keyboard.append([InlineKeyboardButton(f"❌ {short_text}", callback_data=f"adm_del_teachitem_{item_id}")])
+            keyboard.append([InlineKeyboardButton("🔙 رجوع", callback_data="adm_del_teacher_select")])
+            await query.edit_message_text(f"اختر المدرس الذي تريد حذفه نهائياً من قسم {cat_name}:", reply_markup=InlineKeyboardMarkup(keyboard))
+            return
+
+        elif data.startswith("adm_del_teachitem_"):
+            item_id = int(data.replace("adm_del_teachitem_", ""))
+            rows, _ = fetch_query("SELECT category FROM department_additions WHERE id = %s", (item_id,))
+            cat = rows[0][0] if rows else "lesson_عربي"
+            execute_query("DELETE FROM department_additions WHERE id = %s", (item_id,))
+            cat_name = cat.replace("lesson_", "")
+            keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data=f"adm_del_teachspec_{cat_name}")]]
+            await query.edit_message_text("✅ تم حذف المدرس من قاعدة البيانات بنجاح.", reply_markup=InlineKeyboardMarkup(keyboard))
+            return
             
         # ─── 6. إدارة المستخدمين والأمان ───
         elif data == "adm_manage_users_security":
@@ -1760,6 +1965,47 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not await check_subscription(user_id, context.bot):
         await prompt_subscription(update, context)
         return
+
+    if data.startswith("lesscat_"):
+        cat_name = data.replace("lesscat_", "")
+        extra_teachers = get_db_additions(f"lesson_{cat_name}")
+        text_to_send = f"📚 *قسم {cat_name}:*\n\n"
+        if extra_teachers:
+            text_to_send += extra_teachers
+        else:
+            text_to_send += "⚠️ لا يوجد مدرسون مسجلون في هذا القسم حالياً."
+        keyboard = [
+            [InlineKeyboardButton("➕ إضافة مدرس", callback_data=f"add_teacher_for_{cat_name}")],
+            [InlineKeyboardButton("🔙 رجوع للأقسام", callback_data="back_to_lessons")]
+        ]
+        await query.message.reply_text(text_to_send, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard), disable_web_page_preview=True)
+        return
+
+    if data == "back_to_lessons":
+        await query.message.edit_text(LESSONS_TEXT, parse_mode="Markdown", reply_markup=get_lessons_markup())
+        return
+
+    if data == "add_teacher_start":
+        cats = get_lesson_categories()
+        keyboard = []
+        for cat in cats:
+            keyboard.append([InlineKeyboardButton(cat, callback_data=f"add_teacher_for_{cat}")])
+        keyboard.append([InlineKeyboardButton("🔙 رجوع", callback_data="back_to_lessons")])
+        await query.message.edit_text("اختر القسم الدراسي أولاً لإضافة المدرس فيه:", reply_markup=InlineKeyboardMarkup(keyboard))
+        return
+
+    if data.startswith("add_teacher_for_"):
+        cat_name = data.replace("add_teacher_for_", "")
+        context.user_data["choice"] = f"إضافة مدرس: {cat_name}"
+        context.user_data["temp_teacher_cat"] = cat_name
+        await query.message.reply_text(
+            f"📝 يرجى إدخال تفاصيل المدرس للقسم ({cat_name}) في رسالة واحدة كالتالي:\n\n"
+            "1. اسم المدرس:\n"
+            "2. الوصف/المادة والصف:\n"
+            "3. رقم الموبايل:\n\n"
+            "سيتم مراجعة طلبك وإضافته لقسم المدرسين فور موافقة الإدارة. ✅"
+        )
+        return
     
     if data in DOC_TEXT_MAP:
         markup = BACK_DOCTORS_BTN
@@ -1843,7 +2089,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         user_id = parts[-1]
         action = "_".join(parts[1:-1])
         contact_url = f"tg://user?id={user_id}"
-        is_direct_addition = action in ["add_worker", "add_doctor", "add_brand", "add_restaurant", "add_captain"]
+        is_direct_addition = action in ["add_worker", "add_doctor", "add_brand", "add_restaurant", "add_captain", "add_teacher"]
 
         markup = None
         if action == "sos":
@@ -1894,6 +2140,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     doc_data = context.bot_data.pop(req_data_key, None)
                     spec = doc_data["specialty"] if doc_data else "doc_dentist"
                     execute_query("INSERT INTO department_additions (category, details) VALUES (%s, %s)", (spec, details))
+                elif action == "add_teacher":
+                    req_data_key = f"teacher_data_{user_id}"
+                    teach_data = context.bot_data.pop(req_data_key, None)
+                    cat_name = teach_data["category"] if teach_data else "عربي"
+                    execute_query("INSERT INTO department_additions (category, details) VALUES (%s, %s)", (f"lesson_{cat_name}", details))
                 else:
                     cat_map = {
                         "add_brand": "brand",
@@ -1956,6 +2207,7 @@ async def admin_menu_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     keyboard = [
         [InlineKeyboardButton("🛠️ إدارة الفنيين (الصنايعية)", callback_data="adm_manage_workers")],
         [InlineKeyboardButton("🩺 إدارة الأطباء والعيادات", callback_data="adm_manage_doctors")],
+        [InlineKeyboardButton("📚 إدارة الدروس والمدرسين", callback_data="adm_manage_lessons")],
         [InlineKeyboardButton("🏷️ إدارة البراندات والمنتجات", callback_data="adm_manage_brands")],
         [InlineKeyboardButton("🍔 إدارة المطاعم والأكلات", callback_data="adm_manage_restaurants")],
         [InlineKeyboardButton("🛵 إدارة كباتن التوصيل", callback_data="adm_manage_captains")],
