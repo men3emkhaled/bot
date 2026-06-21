@@ -848,6 +848,17 @@ def save_worker_to_db(name, craft, phone):
     except Exception as e:
         logger.error(f"Error saving worker to db: {e}")
 
+def escape_markdown(text: str) -> str:
+    if not text:
+        return ""
+    escaped = ""
+    for char in text:
+        if char in ['_', '*', '[', '`']:
+            escaped += '\\' + char
+        else:
+            escaped += char
+    return escaped
+
 def get_db_workers(craft_key):
     try:
         rows, _ = fetch_query("SELECT name, phone FROM workers WHERE craft = %s", (craft_key,))
@@ -856,7 +867,7 @@ def get_db_workers(craft_key):
         
         extra_text = "\n\n• *فنيين إضافيين تم تسجيلهم عبر البوت:*"
         for row in rows:
-            name, phone = row[0], row[1]
+            name, phone = escape_markdown(row[0]), escape_markdown(row[1])
             extra_text += f"\n\n  • 🛠️ {name}\n    📞 رقم التواصل: {phone}"
         return extra_text
     except Exception as e:
@@ -870,7 +881,7 @@ def get_db_additions(category: str) -> str:
             return ""
         extra_text = "\n\n----------------------------------------\n✨ *إضافات جديدة تم تسجيلها عبر البوت:*"
         for row in rows:
-            details = row[0]
+            details = escape_markdown(row[0])
             extra_text += f"\n\n{details}"
         return extra_text
     except Exception as e:
