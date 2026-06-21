@@ -640,6 +640,26 @@ ADD_DOCTOR_SPECIALTY_KEYBOARD = ReplyKeyboardMarkup(
     resize_keyboard=True,
 )
 
+def get_db_additions(category: str) -> str:
+    try:
+        rows, _ = fetch_query("SELECT details FROM department_additions WHERE category = %s", (category,))
+        if not rows:
+            return ""
+        extra_text = ""
+        for row in rows:
+            raw = row[0] or ""
+            clean_lines = []
+            for line in raw.splitlines():
+                stripped = line.strip().replace("-", "").replace("_", "").replace("—", "").replace("═", "").replace("━", "").replace("=", "").strip()
+                if stripped:
+                    clean_lines.append(line.strip())
+            clean_text = escape_markdown("\n".join(clean_lines))
+            extra_text += f"\n{clean_text}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        return extra_text
+    except Exception as e:
+        logger.error(f"Error reading additions from db: {e}")
+        return ""
+
 DOCTORS_MARKUP = InlineKeyboardMarkup([
     [InlineKeyboardButton("طب وجراحة الفم والأسنان 🦷", callback_data="doc_dentist")],
     [InlineKeyboardButton("العلاج الطبيعي والتغذية 🦾", callback_data="doc_physio")],
@@ -874,19 +894,6 @@ def get_db_workers(craft_key):
         logger.error(f"Error reading workers from db: {e}")
         return ""
 
-def get_db_additions(category: str) -> str:
-    try:
-        rows, _ = fetch_query("SELECT details FROM department_additions WHERE category = %s", (category,))
-        if not rows:
-            return ""
-        extra_text = "\n\n----------------------------------------\n✨ *إضافات جديدة تم تسجيلها عبر البوت:*"
-        for row in rows:
-            details = escape_markdown(row[0])
-            extra_text += f"\n\n{details}"
-        return extra_text
-    except Exception as e:
-        logger.error(f"Error reading additions from db: {e}")
-        return ""
 
 def get_lesson_categories():
     try:
