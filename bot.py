@@ -704,18 +704,51 @@ logger = logging.getLogger(__name__)
 # ════════════════════════════════════════════
 POSTGRES_URL = os.getenv("DATABASE_URL", "postgresql://neondb_owner:npg_gqp6MIP2DcaK@ep-falling-wind-atgrr0p1.c-9.us-east-1.aws.neon.tech/neondb?sslmode=require")
 
+# ─── Connection Pool ───
+_pg_pool = None
+
+def get_pg_pool():
+    global _pg_pool
+    if _pg_pool is None:
+        try:
+            from psycopg2 import pool as pg_pool_mod
+            _pg_pool = pg_pool_mod.ThreadedConnectionPool(
+                minconn=1, maxconn=5, dsn=POSTGRES_URL
+            )
+            logger.info("PostgreSQL connection pool created.")
+        except Exception as e:
+            logger.error(f"Failed to create PG pool: {e}")
+    return _pg_pool
+
+def _get_pg_conn():
+    p = get_pg_pool()
+    return p.getconn() if p else None
+
+def _put_pg_conn(conn, broken=False):
+    p = get_pg_pool()
+    if p and conn:
+        p.putconn(conn, close=broken)
+
 def execute_query(query_str, params=None):
     """Executes a query (INSERT/UPDATE/DELETE) on PostgreSQL and falls back to SQLite if it fails."""
     pg_success = False
+    conn = None
     try:
-        pg_conn = psycopg2.connect(POSTGRES_URL)
-        cursor = pg_conn.cursor()
-        cursor.execute(query_str, params or ())
-        pg_conn.commit()
-        pg_conn.close()
-        pg_success = True
+        conn = _get_pg_conn()
+        if conn:
+            cursor = conn.cursor()
+            cursor.execute(query_str, params or ())
+            conn.commit()
+            _put_pg_conn(conn)
+            pg_success = True
     except Exception as e:
         logger.error(f"PostgreSQL execute error: {e}")
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            _put_pg_conn(conn, broken=True)
 
     try:
         sqlite_conn = sqlite3.connect(DB_PATH)
@@ -730,15 +763,23 @@ def execute_query(query_str, params=None):
 
 def fetch_query(query_str, params=None):
     """Fetches rows from PostgreSQL (preferred) or SQLite (fallback)."""
+    conn = None
     try:
-        pg_conn = psycopg2.connect(POSTGRES_URL)
-        cursor = pg_conn.cursor()
-        cursor.execute(query_str, params or ())
-        rows = cursor.fetchall()
-        pg_conn.close()
-        return rows, True
+        conn = _get_pg_conn()
+        if conn:
+            cursor = conn.cursor()
+            cursor.execute(query_str, params or ())
+            rows = cursor.fetchall()
+            _put_pg_conn(conn)
+            return rows, True
     except Exception as e:
         logger.error(f"PostgreSQL fetch error, falling back to SQLite: {e}")
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            _put_pg_conn(conn, broken=True)
 
     try:
         sqlite_conn = sqlite3.connect(DB_PATH)
@@ -940,7 +981,19 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     text = update.message.text or ""
     
     # Redirect to process_input if they are in an active addition flow
-    interrupts = ["🚨 حالات عاجلة", "إضافة شغلك ➕", "self care ✨", "🚕 مشاركة المشاوير والمواصلات", "💼 وظائف خالية", "🛠️ الخدمات", "🩺 دليل الأطباء والعيادات", "الجمعية الشرعية 🏛️", "الدروس 📚", "💻 مصمم البوت", "🔙 رجوع للقائمة الرئيسية"]
+    interrupts = [
+        "🚨 حالات عاجلة", "إضافة شغلك ➕", "self care ✨",
+        "🚕 مشاركة المشاوير والمواصلات", "💼 وظائف خالية",
+        "🛠️ الخدمات", "🛠 الخدمات", "🩺 دليل الأطباء والعيادات",
+        "الجمعية الشرعية 🏛️", "الدروس 📚", "💻 مصمم البوت",
+        "🔙 رجوع للقائمة الرئيسية", "🔙 رجوع للخدمات",
+        "براند 🏷️", "براند", "🍔 مطاعم", "دليل الصنايعية 🛠️",
+        "مكتبة الوفاء 📚", "مكتب السعد للمحاسبة والمراجعة ⚖️",
+        "📦 خدمات الشحن والتوصيل (الطيارين)",
+        "🪟 معرض استار ميتال للألوميتال",
+        "🤝 طلب مساعدة", "🏟️ حجز ملعب البلاشون",
+        "🚗 سيارات الطوارئ والمشاوير",
+    ]
     if "choice" in context.user_data and context.user_data["choice"].startswith("إضافة") and text not in interrupts:
         return await process_input(update, context)
 
