@@ -1,15 +1,12 @@
 import logging
-import sqlite3
 import psycopg2
 import asyncio
 import datetime
 import textwrap
 import os
-import threading
 from dotenv import load_dotenv
 
 load_dotenv()
-from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -19,26 +16,18 @@ from telegram.ext import (
     filters,
     ContextTypes,
     ConversationHandler,
-    PicklePersistence,
 )
+from persistence import PostgresPersistence
 
 # ─── الإعدادات ───────────────────────────────
-BOT_TOKEN  = os.getenv("BOT_TOKEN")
+BOT_TOKEN  = os.getenv("TELEGRAM_BOT_TOKEN")
 ADMIN_ID   = int(os.getenv("ADMIN_ID",   "5481609181"))
 ADMIN_ID_2 = int(os.getenv("ADMIN_ID_2", "1049124970"))
 ADMIN_ID_3 = int(os.getenv("ADMIN_ID_3", "7986800995"))
 ADMINS     = [ADMIN_ID, ADMIN_ID_2, ADMIN_ID_3]  # قائمة جميع الآدمنز لتوجيه الطلبات
 CHANNEL_ID = os.getenv("CHANNEL_ID", "@AlBalashon_Channel")
 
-# ─── مسارات قواعد البيانات وحفظ الحالة ────────
-DATA_DIR = os.getenv("DATA_DIR", ".")
-if DATA_DIR != "." and not os.path.exists(DATA_DIR):
-    os.makedirs(DATA_DIR, exist_ok=True)
-
-DB_PATH = os.path.join(DATA_DIR, "albalashon.db")
-PERSISTENCE_PATH = os.path.join(DATA_DIR, "albalashon_state.pickle")
-
-# تم استبدال المتغيرات العامة باستخدام context.bot_data لحفظ الحالة
+# تحفظ بيانات المستخدمين وحالات المحادثات في PostgreSQL عبر PostgresPersistence.
 
 # ─── مراحل المحادثة ──────────────────────────
 WAITING_FOR_REQUEST_DETAILS = 1
@@ -722,13 +711,16 @@ logger = logging.getLogger(__name__)
 # ════════════════════════════════════════════
 #  قاعدة البيانات
 # ════════════════════════════════════════════
-POSTGRES_URL = os.getenv("DATABASE_URL", "postgresql://neondb_owner:npg_gqp6MIP2DcaK@ep-falling-wind-atgrr0p1.c-9.us-east-1.aws.neon.tech/neondb?sslmode=require")
+POSTGRES_URL = os.getenv("DATABASE_URL")
 
 # ─── Connection Pool ───
 _pg_pool = None
 
 def get_pg_pool():
     global _pg_pool
+    if not POSTGRES_URL:
+        logger.error("DATABASE_URL is not configured.")
+        return None
     if _pg_pool is None:
         try:
             from psycopg2 import pool as pg_pool_mod
@@ -750,7 +742,7 @@ def _put_pg_conn(conn, broken=False):
         p.putconn(conn, close=broken)
 
 def execute_query(query_str, params=None):
-    """Executes a query (INSERT/UPDATE/DELETE) on PostgreSQL and falls back to SQLite if it fails."""
+    """Executes an INSERT/UPDATE/DELETE on PostgreSQL."""
     pg_success = False
     conn = None
     try:
@@ -770,19 +762,10 @@ def execute_query(query_str, params=None):
                 pass
             _put_pg_conn(conn, broken=True)
 
-    try:
-        sqlite_conn = sqlite3.connect(DB_PATH)
-        sqlite_query = query_str.replace("%s", "?")
-        sqlite_conn.execute(sqlite_query, params or ())
-        sqlite_conn.commit()
-        sqlite_conn.close()
-    except Exception as e:
-        logger.error(f"SQLite execute error: {e}")
-        
     return pg_success
 
 def fetch_query(query_str, params=None):
-    """Fetches rows from PostgreSQL (preferred) or SQLite (fallback)."""
+    """Fetches rows from PostgreSQL."""
     conn = None
     try:
         conn = _get_pg_conn()
@@ -801,20 +784,12 @@ def fetch_query(query_str, params=None):
                 pass
             _put_pg_conn(conn, broken=True)
 
-    try:
-        sqlite_conn = sqlite3.connect(DB_PATH)
-        sqlite_query = query_str.replace("%s", "?")
-        cursor = sqlite_conn.cursor()
-        cursor.execute(sqlite_query, params or ())
-        rows = cursor.fetchall()
-        sqlite_conn.close()
-        return rows, False
-    except Exception as e:
-        logger.error(f"SQLite fetch error: {e}")
-        return [], False
+    return [], False
 
 def init_db():
-    # Initialize PostgreSQL
+    """Create persistent PostgreSQL tables. Vercel has no durable local filesystem."""
+    if not POSTGRES_URL:
+        raise RuntimeError("DATABASE_URL must be configured")
     pg_conn = None
     try:
         pg_conn = psycopg2.connect(POSTGRES_URL)
@@ -834,24 +809,6 @@ def init_db():
     finally:
         if pg_conn:
             pg_conn.close()
-
-    # Initialize SQLite (local backup)
-    try:
-        sqlite_conn = sqlite3.connect(DB_PATH)
-        sqlite_conn.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, joined_at TEXT, last_seen TEXT)")
-        sqlite_conn.execute("CREATE TABLE IF NOT EXISTS workers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, craft TEXT, phone TEXT)")
-        sqlite_conn.execute("CREATE TABLE IF NOT EXISTS department_additions (id INTEGER PRIMARY KEY AUTOINCREMENT, category TEXT, details TEXT)")
-        sqlite_conn.execute("CREATE TABLE IF NOT EXISTS lesson_categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE)")
-        cursor = sqlite_conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM lesson_categories")
-        if cursor.fetchone()[0] == 0:
-            for cat in ["علوم متكاملة", "عربي", "انجليزي", "رياضة"]:
-                cursor.execute("INSERT OR IGNORE INTO lesson_categories (name) VALUES (?)", (cat,))
-        sqlite_conn.commit()
-        sqlite_conn.close()
-        logger.info("SQLite database initialized successfully.")
-    except Exception as e:
-        logger.error(f"SQLite database initialization failed: {e}")
 
 def update_activity(user_id: int):
     today = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=3))).date().isoformat()
@@ -2359,43 +2316,17 @@ async def send_daily_evening_azkar(context: ContextTypes.DEFAULT_TYPE):
     try: await context.bot.send_message(CHANNEL_ID, f"🌆 *أذكار المساء*\n\n{EVENING_AZKAR_TEXT}", parse_mode="Markdown")
     except Exception: pass
 
-# ════════════════════════════════════════════
-#  خادم وهمي لمنع Railway من إيقاف البوت
-# ════════════════════════════════════════════
-class DummyHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Bot is running!")
+def build_application() -> Application:
+    """Build the handler graph used by the Vercel webhook function.
 
-def run_dummy_server():
-    port = int(os.environ.get("PORT", 8080))
-    try:
-        server = HTTPServer(("0.0.0.0", port), DummyHandler)
-        server.serve_forever()
-    except Exception as e:
-        logger.error(f"Dummy server error: {e}")
-
-# ════════════════════════════════════════════
-#  الإعداد والتشغيل
-# ════════════════════════════════════════════
-def main():
-    # بدء الخادم الوهمي في خلفية التطبيق لإرضاء Railway
-    threading.Thread(target=run_dummy_server, daemon=True).start()
-
+    This function deliberately does not start polling, a web server, or a scheduler.
+    Each Telegram POST is processed by ``api/telegram.py`` instead.
+    """
+    if not BOT_TOKEN:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN must be configured")
     init_db()
-    persistence = PicklePersistence(filepath=PERSISTENCE_PATH)
+    persistence = PostgresPersistence(POSTGRES_URL)
     app = Application.builder().token(BOT_TOKEN).persistence(persistence).build()
-    
-    tz = datetime.timezone(datetime.timedelta(hours=3))
-    t_morning = datetime.time(hour=6, minute=0, tzinfo=tz)
-    app.job_queue.run_daily(send_daily_azkar, time=t_morning)
-    
-    t_evening = datetime.time(hour=20, minute=0, tzinfo=tz)
-    app.job_queue.run_daily(send_daily_evening_azkar, time=t_evening)
-    
-    t_stats = datetime.time(hour=23, minute=59, tzinfo=tz)
-    app.job_queue.run_daily(send_daily_stats, time=t_stats)
 
     conv_handler = ConversationHandler(
         entry_points=[
@@ -2417,8 +2348,10 @@ def main():
     app.add_handler(CommandHandler("broadcast", broadcast))
     app.add_handler(CommandHandler("admin", admin_menu_cmd))
 
-    logger.info("🚀 AlBalashon Bot started. Send /start to begin.")
-    app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+    return app
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(
+        "This bot is deployed as a Telegram webhook. Use Vercel /api/telegram; "
+        "do not run a polling process."
+    )
