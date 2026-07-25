@@ -8,7 +8,7 @@ import os
 from flask import Flask, jsonify, request
 from telegram import Update
 
-from bot import build_application
+from bot import build_application, check_and_send_azkar
 
 app = Flask(__name__)
 logger = logging.getLogger(__name__)
@@ -18,6 +18,7 @@ async def process_telegram_update(payload):
     application = build_application()
     try:
         await application.initialize()
+        await check_and_send_azkar(application)
         update = Update.de_json(payload, application.bot)
         await application.process_update(update)
         # update_interval=0 persists user_data, bot_data and conversations now,

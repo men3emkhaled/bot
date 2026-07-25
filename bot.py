@@ -6,7 +6,8 @@ import textwrap
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+logger = logging.getLogger(__name__)
+
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -253,17 +254,18 @@ ALFATH_CLINICS_TEXT = textwrap.dedent("""\
 DEVELOPER_TEXT = textwrap.dedent("""\
     💻 *مصمم ومطور البوت:*
     ----------------------------------------
-    💻 *[الجانب التقني والبرمجي]:*
-    • التخصص: Front-End Developer
-    • الخدمات المتاحة لأصحاب الأعمال والمشاريع:
-      - تصميم وتطوير مواقع احترافية للبرندات والشركات.
-      - بناء أنظمة كاشير وإدارة ومبيعات متكاملة (ERP Systems).
-      - تطوير سيستم كامل لإدارة الشركات التدريبية والأكاديميات.
-      - تصميم وتطوير بوتات تيليجرام احترافية.
+    👤 *Badr M Frere*
+    💻 *Web Developer*
+
+    🛠️ *الخدمات المتاحة لأصحاب الأعمال والمشاريع:*
+    • تصميم وتطوير مواقع احترافية للبرندات والشركات.
+    • بناء أنظمة وإدارة مبيعات متكاملة (ERP Systems).
+    • تطوير سيستم كامل لإدارة الشركات.
+    • تصميم وتطوير بوتات تيليجرام احترافية.
 
     📞 *رقم التواصل والواتساب المباشر:* 01020549760
     ----------------------------------------
-""")
+    🤖 للبوت والخدمات: t.me/AlBalashon\\_services\\_bot""")
 
 EMERGENCY_PHARMACY_INFO = textwrap.dedent("""\
     👨‍⚕️ *صيدلية الطوارئ الليلة بالبلاشون هي:* صيدلية دكتور إبراهيم مصطفى خضر
@@ -293,14 +295,39 @@ EMERGENCY_DOCTOR_TEXT = textwrap.dedent("""\
  
     📞 رقم الهاتف: 01062925584""")
 
+MORNING_AZKAR_TEXT = textwrap.dedent("""\
+    ☀️ *أذكار الصباح* ☀️
+
+    🔹 *[ثلاث مرات]:*
+    سبحان الله وبحمده عدد خلقه، ورضى نفسه، وزنة عرشه، ومداد كلماته. _(رواه مسلم)_
+
+    🔹 *[مرة واحدة]:*
+    أصبحنا وأصبح الملك لله، والحمدُ لله، لا إله إلا الله وحده لا شريك له، له الملكُ وله الحمدُ وهو على كل شيءٍ قدير، ربِّ أسألك خير ما في هذا اليوم وخير ما بعده، وأعوذُ بك من شرِّ ما في هذا اليوم وشرِّ ما بعده، ربِّ أعوذُ بك من الكسل وسُوءِ الكِبَر، ربِّ أعوذُ بك من عذابٍ في النار وعذابٍ في القبر. _(رواه مسلم)_
+
+    ✨ *(اللهم اني استودعتك يومي فارني فيه ما يسعدني و يسرني وابعد عني ما يضرني أنك على كل شي قدير)*""")
+
 EVENING_AZKAR_TEXT = textwrap.dedent("""\
-    أَعُوذُ بِاللهِ مِنْ الشَّيْطَانِ الرَّجِيمِ
-    {اللّهُ لاَ إِلَـهَ إِلاَّ هُوَ الْحَيُّ الْقَيُّومُ لاَ تَأْخُذُهُ سِنَةٌ وَلاَ نَوْمٌ لَّهُ مَا فِي السَّمَاوَاتِ وَمَا فِي الأَرْضِ مَن ذَا الَّذِي يَشْفَعُ عِنْدَهُ إِلاَّ بِإِذْنِهِ يَعْلَمُ مَا بَيْنَ أَيْدِيهِمْ وَمَا خَلْفَهُمْ وَلاَ يُحِيطُونَ بِشَيْءٍ مِّنْ عِلْمِهِ إِلاَّ بِمَا شَاء وَسِعَ كُرْسِيُّهُ السَّمَاوَاتِ وَالأَرْضَ وَلاَ يَؤُودُهُ حِفْظُهُمَا وَهُوَ الْعَلِيُّ الْعَظِيمُ}
+    ﴿ آمَنَ الرَّسُولُ بِمَا أُنزِلَ إِلَيْهِ مِن رَّبِّهِ وَالْمُؤْمِنُونَ ۚ كُلٌّ آمَنَ بِاللَّهِ وَمَلَائِكَتِهِ وَكُتُبِهِ وَرُسُلِهِ لَا نُفَرِّقُ بَيْنَ أَحَدٍ مِّن رَّسُلِهِ ۚ وَقَالُوا سَمِعْنَا وَأَطَعْنَا ۖ غُفْرَانَكَ رَبَّنَا وَإِلَيْكَ الْمَصِيرُ * لَا يُكَلِّفُ اللَّهُ نَفْسًا إِلَّا وُسْعَهَا ۚ لَهَا مَا كَسَبَتْ وَعَلَيْهَا مَا اكْتَسَبَتْ ۗ رَبَّنَا لَا تُؤَاخِذْنَا إِن نَّسِينَا أَوْ أَخْطَأْنَا ۚ رَبَّنَا وَلَا تَحْمِلْ عَلَيْنَا إِصْرًا كَمَا حَمَلْتَهُ عَلَى الَّذِينَ مِن قَبْلِنَا ۚ رَبَّنَا وَلَا تُحَمِّلْنَا مَا لَا طَاقَةَ لَنَا بِهِ ۖ وَاعْفُ عَنَّا وَاغْفِرْ لَنَا وَارْحَمْنَا ۚ أَنتَ مَوْلَانَا فَانصُرْنَا عَلَى الْقَوْمِ الْكَافِرِينَ ﴾
 
     ┈┈┈┈┈┈┈┈┈┈┈┈
+
     🔹 *[مرة واحدة]:*
-    أمسينا على فطرةِ الإسلام، وعلى كلمةِ الإخلاص، وعلى دين نبينا محمدٍ صلى الله عليه وسلم، وعلى ملة أبينا إبراهيم حنيفاً مسلماً وما كان من المشركين.
-    _(رواه أحمد)_""")
+    «أَمْسَيْنَا وَأَمْسَى المُلْكُ لِلَّهِ، وَالْحَمْدُ لِلَّهِ، لاَ إِلَهَ إِلاَّ اللَّهُ وَحْدَهُ لاَ شَرِيكَ لَهُ، لَهُ المُلْكُ وَلَهُ الْحَمْدُ وَهُوَ عَلَى كُلِّ شَيْءٍ قَدِيرٌ، رَبِّ أَسْأَلُكَ خَيْرَ مَا فِي هَذِهِ اللَّيْلَةِ وَخَيْرَ مَا بَعْدَهَا، وَأَعُوذُ بِكَ مِنْ شَرِّ هَذِهِ اللَّيْلَةِ وَشَرِّ مَا بَعْدَهَا، رَبِّ أَعُوذُ بِكَ مِنَ الْكَسَلِ وَسُوءِ الْكِبَرِ، رَبِّ أَعُوذُ بِكَ مِنْ عَذَابٍ فِي النَّارِ وَعَذَابٍ فِي القَبْرِ.»
+
+    ┈┈┈┈┈┈┈┈┈┈┈┈
+
+    🔹 *[3 مرات]:*
+    «بِسْمِ اللَّهِ الَّذِي لاَ يَضُرُّ مَعَ اسْمِهِ شَيْءٌ فِي الأَرْضِ وَلاَ فِي السَّماءِ وَهُوَ السَّمِيعُ العَلِيمُ.»
+
+    ┈┈┈┈┈┈┈┈┈┈┈┈
+
+    🔹 *[3 مرات]:*
+    «أَعُوذُ بِكَلِمَاتِ اللَّهِ التَّامَّاتِ مِنْ شَرِّ مَا خَلَقَ.»""")
+
+FRIDAY_MESSAGE_TEXT = (
+    "صلّوا على سيدنا محمد ﷺ ❤️\n\n"
+    "ولا تنسوا قراءة سورة الكهف 📖"
+)
 
 SELF_CARE_TEXT = textwrap.dedent("""\
     ✨ *صيدلية د/ نهال محمد - Self Care* ✨
@@ -415,6 +442,17 @@ STAR_METAL_TEXT = textwrap.dedent("""\
     🏢 *اسم المعرض:* معرض استار ميتال للألوميتال
     👤 *صاحب المعرض:* محمود عبدالعظيم سعد
     📞 *رقم التواصل:* 01014770786""")
+
+TUKTUK_TEXT = textwrap.dedent("""\
+    🛺 *[خدمة التوكتووووك]*
+    ----------------------------------------
+
+    • 👤 *الطالب:* كريم عماد
+    • 🎂 *السن:* 19 سنة
+    • 📞 *رقم التواصل:* 01090305795 (+20 109 030 5795)
+
+    ----------------------------------------
+    🤖 للبوت والخدمات: t.me/AlBalashon\\_services\\_bot""")
 
 LESSONS_TEXT = textwrap.dedent("""\
     📚 *دليل الدروس والمدرسين بالبلاشون:*
@@ -561,10 +599,10 @@ BRANDS_TEXT = textwrap.dedent("""\
 MAIN_KEYBOARD = ReplyKeyboardMarkup(
     [
         ["🚨 حالات عاجلة", "إضافة شغلك ➕"],
-        ["self care ✨", "🚕 مشاركة المشاوير والمواصلات"],
-        ["💼 وظائف خالية", "🛠️ الخدمات"],
-        ["🩺 دليل الأطباء والعيادات", "الجمعية الشرعية 🏛️"],
-        ["الدروس 📚", "💻 مصمم البوت"]
+        ["self care ✨", "💼 وظائف خالية"],
+        ["🛠️ الخدمات", "🩺 دليل الأطباء والعيادات"],
+        ["الجمعية الشرعية 🏛️", "🛺 التوكتووووك"],
+        ["💻 مصمم البوت"]
     ],
     resize_keyboard=True,
 )
@@ -958,9 +996,8 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     # Redirect to process_input if they are in an active addition flow
     interrupts = [
         "🚨 حالات عاجلة", "إضافة شغلك ➕", "self care ✨",
-        "🚕 مشاركة المشاوير والمواصلات", "💼 وظائف خالية",
-        "🛠️ الخدمات", "🛠 الخدمات", "🩺 دليل الأطباء والعيادات",
-        "الجمعية الشرعية 🏛️", "الدروس 📚", "💻 مصمم البوت",
+        "💼 وظائف خالية", "🛠️ الخدمات", "🛠 الخدمات", "🩺 دليل الأطباء والعيادات",
+        "الجمعية الشرعية 🏛️", "🛺 التوكتووووك", "التوكتووووك", "توكتوك", "💻 مصمم البوت",
         "🔙 رجوع للقائمة الرئيسية", "🔙 رجوع للخدمات",
         "براند 🏷️", "براند", "🍔 مطاعم", "دليل الصنايعية 🛠️",
         "مكتبة الوفاء 📚", "مكتب السعد للمحاسبة والمراجعة ⚖️",
@@ -1078,8 +1115,11 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         await update.message.reply_text(DEVELOPER_TEXT, parse_mode="Markdown", reply_markup=developer_markup)
         return ConversationHandler.END
         
-    if "الدروس" in text or "الدروس 📚" in text:
-        await update.message.reply_text(LESSONS_TEXT, parse_mode="Markdown", reply_markup=get_lessons_markup())
+    if any(k in text for k in ["التوكتووووك", "توكتوك", "التوك توك"]):
+        tuktuk_markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("💬 تواصل عبر واتساب", url="https://wa.me/201090305795")]
+        ])
+        await update.message.reply_text(TUKTUK_TEXT, parse_mode="Markdown", reply_markup=tuktuk_markup)
         return ConversationHandler.END
         
     elif "مطاعم" in text:
@@ -1290,12 +1330,12 @@ async def process_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
     KNOWN = ["🚨 حالات عاجلة", "🏥 صيدليات الطوارئ الليلة", "🩸 التبرع بالدم والطوارئ",
              "🤝 طلب مساعدة", "طلب استغاثة", "🚨 طبيب طوارئ (24 ساعة)", "self care ✨", 
-             "🚕 مشاركة المشاوير والمواصلات", "💼 وظائف خالية", "🛠️ الخدمات", 
+             "💼 وظائف خالية", "🛠️ الخدمات", 
              "🩺 دليل الأطباء والعيادات", "🪟 معرض استار ميتال للألوميتال",
              "📦 خدمات الشحن والتوصيل (الطيارين)", "مكتبة الوفاء 📚", "دليل الصنايعية 🛠️",
              "مكتب السعد للمحاسبة والمراجعة ⚖️", "مكتب السعد", "الجمعية الشرعية 🏛️",
              "الدروس 📚", "الدروس", "💻 مصمم البوت", "🔙 رجوع للقائمة الرئيسية", 
-             "🚕 مشاركة المشاوير", "🛠 الخدمات", "🍔 مطاعم", "🏟️ حجز ملعب البلاشون",
+             "🛠 الخدمات", "🍔 مطاعم", "🏟️ حجز ملعب البلاشون",
              "مكتبة الوفاء", "دليل الصنايعية", "الجمعية الشرعية", "شكاوى", "مفقودات",
              "🚗 سيارات الطوارئ والمشاوير", "براند 🏷️", "براند", "🔙 رجوع للخدمات",
              "إضافة شغلك ➕", "إضافة شغلك", "إضافة طبيب/عيادة 🩺",
@@ -2287,34 +2327,50 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         
     await status.edit_text(f"✅ أُرسلت لـ {sent} مستخدم.\n❌ فشل لـ {failed} مستخدم.")
 
-async def send_daily_azkar(context: ContextTypes.DEFAULT_TYPE):
-    now_date_str = str(datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=3))).date())
-    last_morning = context.bot_data.get("last_morning_date")
-    if last_morning == now_date_str:
-        return
-    context.bot_data["last_morning_date"] = now_date_str
+async def check_and_send_azkar(application: Application):
+    """Check current time (UTC+3 timezone) and send morning (5 AM) or evening (8 PM) azkar if due."""
+    tz = datetime.timezone(datetime.timedelta(hours=3))
+    now = datetime.datetime.now(tz)
+    today_str = str(now.date())
 
-    azkar_text = (
-        "☀️ *أذكار الصباح* ☀️\n\n"
-        "🔹 *[ثلاث مرات]:*\n"
-        "سبحان الله وبحمده عدد خلقه، ورضى نفسه، وزنة عرشه، ومداد كلماته.\n"
-        "_(رواه مسلم)_\n\n"
-        "🔹 *[مرة واحدة]:*\n"
-        "اصبحنا واصبح الملك لله، والحمدُ لله، لا إله إلا الله وحده لا شريك له، له الملكُ وله الحمدُ وهو على كل شيءٍ قدير، ربِّ أسألك خير ما في هذا اليوم وخير ما بعده، وأعوذُ بك من شرِّ ما في هذا اليوم وشرِّ ما بعده، ربِّ أعوذُ بك من الكسل وسُوءِ الكِبَر، ربِّ أعوذُ بك من عذابٍ في النار وعذابٍ في القبر.\n"
-        "_(رواه مسلم)_"
-    )
-    try: await context.bot.send_message(CHANNEL_ID, azkar_text, parse_mode="Markdown")
-    except Exception: pass
+    # Morning Azkar: 5:00 AM (05:00)
+    if now.hour >= 5:
+        last_morning = application.bot_data.get("last_morning_date")
+        if last_morning != today_str:
+            application.bot_data["last_morning_date"] = today_str
+            try:
+                await application.bot.send_message(CHANNEL_ID, MORNING_AZKAR_TEXT, parse_mode="Markdown")
+                logger.info("Morning azkar sent successfully to channel %s", CHANNEL_ID)
+            except Exception as e:
+                logger.error("Failed to send morning azkar: %s", e)
+
+    # Evening Azkar: 8:00 PM (20:00)
+    if now.hour >= 20:
+        last_evening = application.bot_data.get("last_evening_date")
+        if last_evening != today_str:
+            application.bot_data["last_evening_date"] = today_str
+            try:
+                await application.bot.send_message(CHANNEL_ID, f"🌆 *أذكار المساء*\n\n{EVENING_AZKAR_TEXT}", parse_mode="Markdown")
+                logger.info("Evening azkar sent successfully to channel %s", CHANNEL_ID)
+            except Exception as e:
+                logger.error("Failed to send evening azkar: %s", e)
+
+    # Friday Reminder: Every Friday at 1:00 PM (13:00)
+    if now.weekday() == 4 and now.hour >= 13:
+        last_friday = application.bot_data.get("last_friday_date")
+        if last_friday != today_str:
+            application.bot_data["last_friday_date"] = today_str
+            try:
+                await application.bot.send_message(CHANNEL_ID, FRIDAY_MESSAGE_TEXT)
+                logger.info("Friday message sent successfully to channel %s", CHANNEL_ID)
+            except Exception as e:
+                logger.error("Failed to send Friday message: %s", e)
+
+async def send_daily_azkar(context: ContextTypes.DEFAULT_TYPE):
+    await check_and_send_azkar(context.application)
 
 async def send_daily_evening_azkar(context: ContextTypes.DEFAULT_TYPE):
-    now_date_str = str(datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=3))).date())
-    last_evening = context.bot_data.get("last_evening_date")
-    if last_evening == now_date_str:
-        return
-    context.bot_data["last_evening_date"] = now_date_str
-
-    try: await context.bot.send_message(CHANNEL_ID, f"🌆 *أذكار المساء*\n\n{EVENING_AZKAR_TEXT}", parse_mode="Markdown")
-    except Exception: pass
+    await check_and_send_azkar(context.application)
 
 def build_application() -> Application:
     """Build the handler graph used by the Vercel webhook function.

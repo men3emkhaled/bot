@@ -1,7 +1,17 @@
 {
   "functions": {
-    "api/telegram.py": {
+    "api/*.py": {
       "maxDuration": 30
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron",
+      "schedule": "0 2,17 * * *"
+    },
+    {
+      "path": "/api/cron",
+      "schedule": "0 10 * * 5"
+    }
+  ]
 }
