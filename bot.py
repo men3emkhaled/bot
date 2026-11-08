@@ -251,21 +251,16 @@ ALFATH_CLINICS_TEXT = textwrap.dedent("""\
     ----------------------------------------
     🤖 للبوت والخدمات: t.me/AlBalashon\\_services\\_bot""")
 
-DEVELOPER_TEXT = textwrap.dedent("""\
-    💻 *مصمم ومطور البوت:*
+ONLINE_SERVICES_TEXT = textwrap.dedent("""\
+    🌐 *[خدمات أونلاين بالبلاشون]*
     ----------------------------------------
-    👤 *Badr M Frere*
-    💻 *Web Developer*
 
-    🛠️ *الخدمات المتاحة لأصحاب الأعمال والمشاريع:*
-    • تصميم وتطوير مواقع احترافية للبرندات والشركات.
-    • بناء أنظمة وإدارة مبيعات متكاملة (ERP Systems).
-    • تطوير سيستم كامل لإدارة الشركات.
-    • تصميم وتطوير بوتات تيليجرام احترافية.
+    • دليل الخدمات الرقمية والأونلاين.
 
-    📞 *رقم التواصل والواتساب المباشر:* 01020549760
     ----------------------------------------
     🤖 للبوت والخدمات: t.me/AlBalashon\\_services\\_bot""")
+
+DEVELOPER_TEXT = ONLINE_SERVICES_TEXT
 
 EMERGENCY_PHARMACY_INFO = textwrap.dedent("""\
     👨‍⚕️ *صيدلية الطوارئ الليلة بالبلاشون هي:* صيدلية دكتور إبراهيم مصطفى خضر
@@ -597,7 +592,7 @@ MAIN_KEYBOARD = ReplyKeyboardMarkup(
         ["self care ✨", "💼 وظائف خالية"],
         ["🛠️ الخدمات", "🩺 دليل الأطباء والعيادات"],
         ["الجمعية الشرعية 🏛️", "🛺 التوكتووووك"],
-        ["💻 مصمم البوت"]
+        ["🌐 خدمات أونلاين"]
     ],
     resize_keyboard=True,
 )
@@ -634,8 +629,8 @@ ADD_WORK_KEYBOARD = ReplyKeyboardMarkup(
     [
         ["إضافة طبيب/عيادة 🩺", "إضافة صنايعي 🛠️"],
         ["إضافة براند 🏷️", "إضافة مطعم 🍔"],
-        ["إضافة كابتن توصيل 🛵", "إضافة مدرس 📚"],
-        ["🔙 رجوع للقائمة الرئيسية"]
+        ["إضافة كابتن توصيل 🛵", "إضافة توكتوك 🛺"],
+        ["إضافة مدرس 📚", "🔙 رجوع للقائمة الرئيسية"]
     ],
     resize_keyboard=True,
 )
@@ -829,6 +824,7 @@ def init_db():
         cursor = pg_conn.cursor()
         cursor.execute("CREATE TABLE IF NOT EXISTS users (user_id BIGINT PRIMARY KEY, joined_at VARCHAR(100), last_seen VARCHAR(100))")
         cursor.execute("CREATE TABLE IF NOT EXISTS workers (id SERIAL PRIMARY KEY, name VARCHAR(255), craft VARCHAR(255), phone VARCHAR(100))")
+        cursor.execute("CREATE TABLE IF NOT EXISTS worker_crafts (id SERIAL PRIMARY KEY, name VARCHAR(255) UNIQUE)")
         cursor.execute("CREATE TABLE IF NOT EXISTS department_additions (id SERIAL PRIMARY KEY, category VARCHAR(50), details TEXT)")
         cursor.execute("CREATE TABLE IF NOT EXISTS lesson_categories (id SERIAL PRIMARY KEY, name VARCHAR(255) UNIQUE)")
         cursor.execute("SELECT COUNT(*) FROM lesson_categories")
@@ -883,6 +879,67 @@ def get_db_workers(craft_key):
     except Exception as e:
         logger.error(f"Error reading workers from db: {e}")
         return ""
+
+def get_custom_crafts():
+    try:
+        rows, _ = fetch_query("SELECT id, name FROM worker_crafts ORDER BY id ASC")
+        return [(r[0], r[1]) for r in rows] if rows else []
+    except Exception as e:
+        logger.error(f"Error fetching custom crafts: {e}")
+        return []
+
+def get_craft_display_name(craft_key: str) -> str:
+    default_names = {
+        "work_wood": "نجار",
+        "work_paint": "نقاش",
+        "work_elec": "كهربائي",
+        "work_ceramic": "مبلط",
+        "work_washing_machine": "صيانة غسالات",
+    }
+    if craft_key in default_names:
+        return default_names[craft_key]
+    if craft_key.startswith("craft_"):
+        try:
+            c_id = int(craft_key.replace("craft_", ""))
+            rows, _ = fetch_query("SELECT name FROM worker_crafts WHERE id = %s", (c_id,))
+            if rows:
+                return rows[0][0]
+        except Exception:
+            pass
+    return craft_key
+
+def get_workers_markup() -> InlineKeyboardMarkup:
+    keyboard = [
+        [InlineKeyboardButton("نجار 🪵", callback_data="work_wood")],
+        [InlineKeyboardButton("نقاش 🎨", callback_data="work_paint")],
+        [InlineKeyboardButton("كهربائي ⚡", callback_data="work_elec")],
+        [InlineKeyboardButton("مبلط 🧱", callback_data="work_ceramic")],
+        [InlineKeyboardButton("صيانة غسالات 🧼", callback_data="work_washing_machine")]
+    ]
+    for c_id, c_name in get_custom_crafts():
+        btn_text = c_name if any(ord(c) > 0x2000 for c in c_name) else f"{c_name} 🛠️"
+        keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"craft_{c_id}")])
+    return InlineKeyboardMarkup(keyboard)
+
+def get_add_worker_craft_keyboard() -> ReplyKeyboardMarkup:
+    buttons = [
+        ["نجار 🪵", "نقاش 🎨"],
+        ["كهربائي ⚡", "مبلط 🧱"],
+        ["صيانة غسالات 🧼"],
+    ]
+    custom = get_custom_crafts()
+    for i in range(0, len(custom), 2):
+        row = []
+        c_id, c_name = custom[i]
+        btn_text = c_name if any(ord(c) > 0x2000 for c in c_name) else f"{c_name} 🛠️"
+        row.append(btn_text)
+        if i + 1 < len(custom):
+            c_id2, c_name2 = custom[i + 1]
+            btn_text2 = c_name2 if any(ord(c) > 0x2000 for c in c_name2) else f"{c_name2} 🛠️"
+            row.append(btn_text2)
+        buttons.append(row)
+    buttons.append(["🔙 رجوع للقائمة الرئيسية"])
+    return ReplyKeyboardMarkup(buttons, resize_keyboard=True)
 
 
 def get_lesson_categories():
@@ -992,7 +1049,7 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     interrupts = [
         "🚨 حالات عاجلة", "إضافة شغلك ➕", "self care ✨",
         "💼 وظائف خالية", "🛠️ الخدمات", "🛠 الخدمات", "🩺 دليل الأطباء والعيادات",
-        "الجمعية الشرعية 🏛️", "🛺 التوكتووووك", "التوكتووووك", "توكتوك", "💻 مصمم البوت",
+        "الجمعية الشرعية 🏛️", "🛺 التوكتووووك", "التوكتووووك", "توكتوك", "🌐 خدمات أونلاين", "خدمات أونلاين", "خدمات اونلاين",
         "🔙 رجوع للقائمة الرئيسية", "🔙 رجوع للخدمات",
         "براند 🏷️", "براند", "🍔 مطاعم", "دليل الصنايعية 🛠️",
         "مكتبة الوفاء 📚", "مكتب السعد للمحاسبة والمراجعة ⚖️",
@@ -1007,20 +1064,70 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     if user_id in ADMINS and "admin_action" in context.user_data:
         action = context.user_data.pop("admin_action")
         
-        if action == "admin_add_worker_name":
-            context.user_data["admin_add_worker_name"] = text.strip()
-            context.user_data["admin_action"] = "admin_add_worker_phone"
-            await update.message.reply_text("📞 يرجى إرسال **رقم الهاتف** للفني الجديد:")
+        if action == "admin_add_craft_name":
+            craft_name = text.strip()
+            if craft_name:
+                execute_query("INSERT INTO worker_crafts (name) VALUES (%s) ON CONFLICT DO NOTHING", (craft_name,))
+                rows, _ = fetch_query("SELECT id FROM worker_crafts WHERE name = %s", (craft_name,))
+                craft_id = rows[0][0] if rows else None
+                keyboard = []
+                if craft_id:
+                    keyboard.append([InlineKeyboardButton("➕ إضافة بيانات صنايعي لهذه الحرفة الآن", callback_data=f"adm_add_wcraft_craft_{craft_id}")])
+                keyboard.append([InlineKeyboardButton("🔙 رجوع لإدارة الصنايعية", callback_data="adm_manage_workers")])
+                await update.message.reply_text(
+                    f"✅ تم إضافة حرفة *{craft_name}* بنجاح كقسم جديد بجانب الأقسام الحالية.",
+                    parse_mode="Markdown",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+            else:
+                await update.message.reply_text("⚠️ اسم الحرفة غير صالح.")
             return ConversationHandler.END
+
+        elif action == "admin_add_worker_name":
+            lines = [l.strip() for l in text.strip().split("\n") if l.strip()]
+            if len(lines) >= 2:
+                name = lines[0]
+                phone = lines[1]
+                for line in lines:
+                    if "الاسم" in line:
+                        name = line.split("الاسم")[-1].replace(":", "").strip()
+                    elif any(k in line for k in ["الهاتف", "الموبايل", "تواصل", "رقم"]):
+                        phone = line.split(":")[-1].strip()
+                craft = context.user_data.pop("admin_add_worker_craft", "work_wood")
+                save_worker_to_db(name, craft, phone)
+                craft_title = get_craft_display_name(craft)
+                keyboard = [
+                    [InlineKeyboardButton("➕ إضافة فني آخر لنفس الحرفة", callback_data=f"adm_add_wcraft_{craft}")],
+                    [InlineKeyboardButton("🔙 رجوع لإدارة الفنيين", callback_data="adm_manage_workers")]
+                ]
+                await update.message.reply_text(
+                    f"✅ تم إضافة الفني *{name}* بنجاح إلى قسم *{craft_title}*.",
+                    parse_mode="Markdown",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+                return ConversationHandler.END
+            else:
+                context.user_data["admin_add_worker_name"] = text.strip()
+                context.user_data["admin_action"] = "admin_add_worker_phone"
+                await update.message.reply_text("📞 يرجى إرسال **رقم الهاتف** للتواصل مع الفني:")
+                return ConversationHandler.END
             
         elif action == "admin_add_worker_phone":
             name = context.user_data.pop("admin_add_worker_name", "فني")
             craft = context.user_data.pop("admin_add_worker_craft", "work_wood")
             phone = text.strip()
             save_worker_to_db(name, craft, phone)
+            craft_title = get_craft_display_name(craft)
             
-            keyboard = [[InlineKeyboardButton("🔙 رجوع لإدارة الفنيين", callback_data="adm_manage_workers")]]
-            await update.message.reply_text(f"✅ تم إضافة الفني *{name}* بنجاح إلى القسم.", parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+            keyboard = [
+                [InlineKeyboardButton("➕ إضافة فني آخر لنفس الحرفة", callback_data=f"adm_add_wcraft_{craft}")],
+                [InlineKeyboardButton("🔙 رجوع لإدارة الفنيين", callback_data="adm_manage_workers")]
+            ]
+            await update.message.reply_text(
+                f"✅ تم إضافة الفني *{name}* بنجاح إلى قسم *{craft_title}*.",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
             return ConversationHandler.END
             
         elif action == "admin_add_doctor_details":
@@ -1046,6 +1153,18 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             execute_query("INSERT INTO department_additions (category, details) VALUES (%s, %s)", ("captain", text.strip()))
             keyboard = [[InlineKeyboardButton("🔙 رجوع لإدارة الكباتن", callback_data="adm_manage_captains")]]
             await update.message.reply_text("✅ تم إضافة كابتن التوصيل بنجاح إلى القسم.", reply_markup=InlineKeyboardMarkup(keyboard))
+            return ConversationHandler.END
+
+        elif action == "admin_add_tuktuk_details":
+            execute_query("INSERT INTO department_additions (category, details) VALUES (%s, %s)", ("tuktuk", text.strip()))
+            keyboard = [[InlineKeyboardButton("🔙 رجوع لإدارة التوكتوك", callback_data="adm_manage_tuktuk")]]
+            await update.message.reply_text("✅ تم إضافة التوكتوك بنجاح إلى قسم التوكتووووك.", reply_markup=InlineKeyboardMarkup(keyboard))
+            return ConversationHandler.END
+
+        elif action == "admin_add_online_details":
+            execute_query("INSERT INTO department_additions (category, details) VALUES (%s, %s)", ("online_services", text.strip()))
+            keyboard = [[InlineKeyboardButton("🔙 رجوع لإدارة خدمات أونلاين", callback_data="adm_manage_online_services")]]
+            await update.message.reply_text("✅ تم إضافة الخدمة الأونلاين بنجاح إلى قسم خدمات أونلاين.", reply_markup=InlineKeyboardMarkup(keyboard))
             return ConversationHandler.END
 
         elif action == "admin_add_lesscat_name":
@@ -1103,18 +1222,17 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         await update.message.reply_text(DOCTORS_TEXT, parse_mode="Markdown", reply_markup=DOCTORS_MARKUP, disable_web_page_preview=True)
         return ConversationHandler.END
 
-    if "مصمم البوت" in text:
-        developer_markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("💻 تواصل مع مصمم البوت (واتساب)", url="https://wa.me/201020549760")]
-        ])
-        await update.message.reply_text(DEVELOPER_TEXT, parse_mode="Markdown", reply_markup=developer_markup)
+    if any(k in text for k in ["خدمات أونلاين", "خدمات اونلاين", "مصمم البوت"]):
+        extra = get_db_additions("online_services")
+        await update.message.reply_text(ONLINE_SERVICES_TEXT + extra, parse_mode="Markdown")
         return ConversationHandler.END
         
     if any(k in text for k in ["التوكتووووك", "توكتوك", "التوك توك"]):
+        extra = get_db_additions("tuktuk")
         tuktuk_markup = InlineKeyboardMarkup([
             [InlineKeyboardButton("💬 تواصل عبر واتساب", url="https://wa.me/201090305795")]
         ])
-        await update.message.reply_text(TUKTUK_TEXT, parse_mode="Markdown", reply_markup=tuktuk_markup)
+        await update.message.reply_text(TUKTUK_TEXT + extra, parse_mode="Markdown", reply_markup=tuktuk_markup, disable_web_page_preview=True)
         return ConversationHandler.END
         
     elif "مطاعم" in text:
@@ -1176,7 +1294,7 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return ConversationHandler.END
         
     elif "الصنايعية" in text:
-        await update.message.reply_text(WORKERS_TEXT, parse_mode="Markdown", reply_markup=WORKERS_MARKUP, disable_web_page_preview=True)
+        await update.message.reply_text(WORKERS_TEXT, parse_mode="Markdown", reply_markup=get_workers_markup(), disable_web_page_preview=True)
         return ConversationHandler.END
 
     elif "براند" in text and not "إضافة" in text and not "رجوع" in text:
@@ -1204,7 +1322,7 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     elif "إضافة صنايعي" in text:
         await update.message.reply_text(
             "اختر الحرفة الخاصة بك من القائمة بالأسفل لتصنيفها بشكل صحيح داخل البوت:",
-            reply_markup=ADD_WORKER_CRAFT_KEYBOARD
+            reply_markup=get_add_worker_craft_keyboard()
         )
         context.user_data["choice"] = "إضافة صنايعي"
         return WAITING_FOR_REQUEST_DETAILS
@@ -1240,6 +1358,17 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             "سيتم مراجعة طلبك وإضافته لقسم كباتن التوصيل فور موافقة الإدارة. ✅"
         )
         context.user_data["choice"] = "إضافة كابتن"
+        return WAITING_FOR_REQUEST_DETAILS
+
+    elif "إضافة توكتوك" in text:
+        await update.message.reply_text(
+            "📝 يرجى إدخال بيانات التوكتوك في رسالة واحدة كالتالي:\n\n"
+            "1. الاسم والسن:\n"
+            "2. المنطقة/الموقف:\n"
+            "3. رقم التواصل:\n\n"
+            "سيتم مراجعة طلبك وإضافته لقسم التوكتوك فور موافقة الإدارة. ✅"
+        )
+        context.user_data["choice"] = "إضافة توكتوك"
         return WAITING_FOR_REQUEST_DETAILS
 
     elif "إضافة مدرس" in text:
@@ -1329,7 +1458,7 @@ async def process_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
              "🩺 دليل الأطباء والعيادات", "🪟 معرض استار ميتال للألوميتال",
              "📦 خدمات الشحن والتوصيل (الطيارين)", "مكتبة الوفاء 📚", "دليل الصنايعية 🛠️",
              "مكتب السعد للمحاسبة والمراجعة ⚖️", "مكتب السعد", "الجمعية الشرعية 🏛️",
-             "الدروس 📚", "الدروس", "💻 مصمم البوت", "🔙 رجوع للقائمة الرئيسية", 
+             "الدروس 📚", "الدروس", "🌐 خدمات أونلاين", "خدمات أونلاين", "خدمات اونلاين", "💻 مصمم البوت", "🔙 رجوع للقائمة الرئيسية", 
              "🛠 الخدمات", "🍔 مطاعم", "🏟️ حجز ملعب البلاشون",
              "مكتبة الوفاء", "دليل الصنايعية", "الجمعية الشرعية", "شكاوى", "مفقودات",
              "🚗 سيارات الطوارئ والمشاوير", "براند 🏷️", "براند", "🔙 رجوع للخدمات",
@@ -1426,25 +1555,29 @@ async def process_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
     # ─── التحقق من مرحلة اختيار الحرفة أولاً ───
     if choice == "إضافة صنايعي":
-        if any(c in user_text for c in ["نجار", "نقاش", "كهربائي", "مبلط", "غسالات"]):
-            craft_key = "work_wood"
-            craft_name = "نجار"
-            if "نجار" in user_text:
-                craft_key = "work_wood"
-                craft_name = "نجار"
-            elif "نقاش" in user_text:
-                craft_key = "work_paint"
-                craft_name = "نقاش"
-            elif "كهربائي" in user_text:
-                craft_key = "work_elec"
-                craft_name = "كهربائي"
-            elif "مبلط" in user_text:
-                craft_key = "work_ceramic"
-                craft_name = "مبلط"
-            elif "غسالات" in user_text:
-                craft_key = "work_washing_machine"
-                craft_name = "صيانة غسالات"
+        craft_matched = False
+        craft_key = "work_wood"
+        craft_name = "نجار"
 
+        if "نجار" in user_text:
+            craft_key, craft_name, craft_matched = "work_wood", "نجار", True
+        elif "نقاش" in user_text:
+            craft_key, craft_name, craft_matched = "work_paint", "نقاش", True
+        elif "كهربائي" in user_text:
+            craft_key, craft_name, craft_matched = "work_elec", "كهربائي", True
+        elif "مبلط" in user_text:
+            craft_key, craft_name, craft_matched = "work_ceramic", "مبلط", True
+        elif "غسالات" in user_text:
+            craft_key, craft_name, craft_matched = "work_washing_machine", "صيانة غسالات", True
+        else:
+            for c_id, c_name in get_custom_crafts():
+                if c_name in user_text:
+                    craft_key = f"craft_{c_id}"
+                    craft_name = c_name
+                    craft_matched = True
+                    break
+
+        if craft_matched:
             context.user_data["temp_craft_key"] = craft_key
             context.user_data["temp_craft_name"] = craft_name
             context.user_data["choice"] = f"إضافة صنايعي: {craft_name}"
@@ -1459,7 +1592,7 @@ async def process_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         else:
             await update.message.reply_text(
                 "⚠️ عذراً، يرجى اختيار الحرفة الخاصة بك من القائمة بالأسفل أولاً لتصنيفها بشكل صحيح داخل البوت:",
-                reply_markup=ADD_WORKER_CRAFT_KEYBOARD
+                reply_markup=get_add_worker_craft_keyboard()
             )
             return WAITING_FOR_REQUEST_DETAILS
 
@@ -1548,6 +1681,9 @@ async def process_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         elif "إضافة كابتن" in choice:
             action_code = "add_captain"
             action_name = "طلب إضافة كابتن توصيل"
+        elif "إضافة توكتوك" in choice:
+            action_code = "add_tuktuk"
+            action_name = "طلب إضافة توكتوك"
             
         if action_code:
             markup = InlineKeyboardMarkup([[
@@ -1609,6 +1745,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 [InlineKeyboardButton("🏷️ إدارة البراندات والمنتجات", callback_data="adm_manage_brands")],
                 [InlineKeyboardButton("🍔 إدارة المطاعم والأكلات", callback_data="adm_manage_restaurants")],
                 [InlineKeyboardButton("🛵 إدارة كباتن التوصيل", callback_data="adm_manage_captains")],
+                [InlineKeyboardButton("🛺 إدارة التوكتوك", callback_data="adm_manage_tuktuk")],
+                [InlineKeyboardButton("🌐 إدارة خدمات أونلاين", callback_data="adm_manage_online_services")],
                 [InlineKeyboardButton("👤 إدارة المستخدمين والأمان", callback_data="adm_manage_users_security")]
             ]
             await query.edit_message_text("👮‍♂️ *لوحة تحكم وإدارة البوت للأدمن:*", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
@@ -1617,12 +1755,48 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         # ─── 1. إدارة الفنيين ───
         elif data == "adm_manage_workers":
             keyboard = [
+                [InlineKeyboardButton("➕ إضافة نوع حرفة جديد", callback_data="adm_add_craft")],
+                [InlineKeyboardButton("❌ حذف نوع حرفة بالكامل", callback_data="adm_del_craftcat_select")],
                 [InlineKeyboardButton("➕ إضافة فني يدوياً", callback_data="adm_add_worker_select")],
                 [InlineKeyboardButton("❌ حذف فني محدد", callback_data="adm_del_worker_select")],
                 [InlineKeyboardButton("⚠️ مسح قسم فني بالكامل", callback_data="adm_del_craft_select")],
                 [InlineKeyboardButton("🔙 رجوع للقائمة الرئيسية", callback_data="adm_back_menu")]
             ]
             await query.edit_message_text("🛠️ *إدارة قسم الفنيين (الصنايعية):*", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+            return
+
+        elif data == "adm_add_craft":
+            context.user_data["admin_action"] = "admin_add_craft_name"
+            keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="adm_manage_workers")]]
+            await query.edit_message_text(
+                "📝 يرجى إرسال **اسم** نوع الحرفة الجديد في رسالة (الاسم):\n\n"
+                "*(مثال: سباك، حداد، ألوميتال، تكييف وتبريد)*",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            return
+
+        elif data == "adm_del_craftcat_select":
+            custom_crafts = get_custom_crafts()
+            if not custom_crafts:
+                keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="adm_manage_workers")]]
+                await query.edit_message_text("⚠️ لا توجد حرف إضافية مسجلة حالياً لحذفها.", reply_markup=InlineKeyboardMarkup(keyboard))
+                return
+            keyboard = []
+            for c_id, c_name in custom_crafts:
+                keyboard.append([InlineKeyboardButton(f"❌ {c_name}", callback_data=f"adm_del_craftcat_{c_id}")])
+            keyboard.append([InlineKeyboardButton("🔙 رجوع", callback_data="adm_manage_workers")])
+            await query.edit_message_text("⚠️ اختر نوع الحرفة التي تريد حذفها بالكامل (سيتم حذف الحرفة وجميع الفنيين المسجلين بها):", reply_markup=InlineKeyboardMarkup(keyboard))
+            return
+
+        elif data.startswith("adm_del_craftcat_"):
+            c_id = int(data.replace("adm_del_craftcat_", ""))
+            rows, _ = fetch_query("SELECT name FROM worker_crafts WHERE id = %s", (c_id,))
+            craft_name = rows[0][0] if rows else "الحرفة"
+            execute_query("DELETE FROM worker_crafts WHERE id = %s", (c_id,))
+            execute_query("DELETE FROM workers WHERE craft = %s", (f"craft_{c_id}",))
+            keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="adm_manage_workers")]]
+            await query.edit_message_text(f"✅ تم حذف حرفة *{craft_name}* وجميع الفنيين المسجلين بها بنجاح.", parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
             return
             
         elif data == "adm_add_worker_select":
@@ -1632,8 +1806,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 [InlineKeyboardButton("كهربائي ⚡", callback_data="adm_add_wcraft_work_elec")],
                 [InlineKeyboardButton("مبلط 🧱", callback_data="adm_add_wcraft_work_ceramic")],
                 [InlineKeyboardButton("صيانة غسالات 🧼", callback_data="adm_add_wcraft_work_washing_machine")],
-                [InlineKeyboardButton("🔙 رجوع", callback_data="adm_manage_workers")]
             ]
+            for c_id, c_name in get_custom_crafts():
+                btn_text = c_name if any(ord(c) > 0x2000 for c in c_name) else f"{c_name} 🛠️"
+                keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"adm_add_wcraft_craft_{c_id}")])
+            keyboard.append([InlineKeyboardButton("🔙 رجوع", callback_data="adm_manage_workers")])
             await query.edit_message_text("اختر القسم لإضافة الفني الجديد فيه:", reply_markup=InlineKeyboardMarkup(keyboard))
             return
             
@@ -1641,7 +1818,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             craft_key = data.replace("adm_add_wcraft_", "")
             context.user_data["admin_action"] = "admin_add_worker_name"
             context.user_data["admin_add_worker_craft"] = craft_key
-            await query.edit_message_text("📝 يرجى إرسال **اسم الفني** الجديد في رسالة:")
+            craft_title = get_craft_display_name(craft_key)
+            keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="adm_manage_workers")]]
+            await query.edit_message_text(
+                f"📝 قسم: *{craft_title}*\n\nيرجى إرسال **اسم** الفني/الصنايعي في رسالة (الاسم):",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
             return
             
         elif data == "adm_del_worker_select":
@@ -1651,8 +1834,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 [InlineKeyboardButton("كهربائي ⚡", callback_data="adm_del_wlist_work_elec")],
                 [InlineKeyboardButton("مبلط 🧱", callback_data="adm_del_wlist_work_ceramic")],
                 [InlineKeyboardButton("صيانة غسالات 🧼", callback_data="adm_del_wlist_work_washing_machine")],
-                [InlineKeyboardButton("🔙 رجوع", callback_data="adm_manage_workers")]
             ]
+            for c_id, c_name in get_custom_crafts():
+                btn_text = c_name if any(ord(c) > 0x2000 for c in c_name) else f"{c_name} 🛠️"
+                keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"adm_del_wlist_craft_{c_id}")])
+            keyboard.append([InlineKeyboardButton("🔙 رجوع", callback_data="adm_manage_workers")])
             await query.edit_message_text("اختر القسم لعرض الفنيين وحذف فني محدد:", reply_markup=InlineKeyboardMarkup(keyboard))
             return
             
@@ -1663,8 +1849,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 [InlineKeyboardButton("مسح كهربائية ⚡", callback_data="adm_del_craft_work_elec")],
                 [InlineKeyboardButton("مسح مبلطين 🧱", callback_data="adm_del_craft_work_ceramic")],
                 [InlineKeyboardButton("مسح صيانة غسالات 🧼", callback_data="adm_del_craft_work_washing_machine")],
-                [InlineKeyboardButton("🔙 رجوع", callback_data="adm_manage_workers")]
             ]
+            for c_id, c_name in get_custom_crafts():
+                keyboard.append([InlineKeyboardButton(f"مسح {c_name} 🛠️", callback_data=f"adm_del_craft_craft_{c_id}")])
+            keyboard.append([InlineKeyboardButton("🔙 رجوع", callback_data="adm_manage_workers")])
             await query.edit_message_text("⚠️ اختر القسم لمسح جميع الفنيين المسجلين فيه بالكامل:", reply_markup=InlineKeyboardMarkup(keyboard))
             return
             
@@ -1823,6 +2011,46 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             )
             return
 
+        # ─── 5.2. إدارة التوكتوك ───
+        elif data == "adm_manage_tuktuk":
+            keyboard = [
+                [InlineKeyboardButton("➕ إضافة توكتوك يدوياً", callback_data="adm_add_tuktuk_direct")],
+                [InlineKeyboardButton("❌ عرض وحذف توكتوك", callback_data="adm_del_addlist_tuktuk")],
+                [InlineKeyboardButton("🔙 رجوع للقائمة الرئيسية", callback_data="adm_back_menu")]
+            ]
+            await query.edit_message_text("🛺 *إدارة قسم التوكتوك:*", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+            return
+
+        elif data == "adm_add_tuktuk_direct":
+            context.user_data["admin_action"] = "admin_add_tuktuk_details"
+            await query.edit_message_text(
+                "📝 يرجى إرسال بيانات التوكتوك في رسالة واحدة كالتالي:\n\n"
+                "1. الاسم والسن:\n"
+                "2. المنطقة/الموقف:\n"
+                "3. رقم التواصل:"
+            )
+            return
+
+        # ─── 5.3. إدارة خدمات أونلاين ───
+        elif data == "adm_manage_online_services":
+            keyboard = [
+                [InlineKeyboardButton("➕ إضافة خدمة أونلاين", callback_data="adm_add_online_direct")],
+                [InlineKeyboardButton("❌ عرض وحذف خدمة أونلاين", callback_data="adm_del_addlist_online_services")],
+                [InlineKeyboardButton("🔙 رجوع للقائمة الرئيسية", callback_data="adm_back_menu")]
+            ]
+            await query.edit_message_text("🌐 *إدارة قسم خدمات أونلاين:*", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+            return
+
+        elif data == "adm_add_online_direct":
+            context.user_data["admin_action"] = "admin_add_online_details"
+            await query.edit_message_text(
+                "📝 يرجى إرسال تفاصيل الخدمة الأونلاين في رسالة واحدة كالتالي:\n\n"
+                "1. اسم الخدمة / مقدم الخدمة:\n"
+                "2. وصف الخدمة المتاحة:\n"
+                "3. الرابط ورقم التواصل:"
+            )
+            return
+
         # ─── 5.5. إدارة الدروس ───
         elif data == "adm_manage_lessons":
             keyboard = [
@@ -1950,7 +2178,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 back_map = {
                     "brand": "adm_manage_brands",
                     "restaurant": "adm_manage_restaurants",
-                    "captain": "adm_manage_captains"
+                    "captain": "adm_manage_captains",
+                    "tuktuk": "adm_manage_tuktuk",
+                    "online_services": "adm_manage_online_services"
                 }
                 back_cb = back_map.get(cat, "adm_back_menu")
             
@@ -1984,7 +2214,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 back_map = {
                     "brand": "adm_manage_brands",
                     "restaurant": "adm_manage_restaurants",
-                    "captain": "adm_manage_captains"
+                    "captain": "adm_manage_captains",
+                    "tuktuk": "adm_manage_tuktuk",
+                    "online_services": "adm_manage_online_services"
                 }
                 back_cb = back_map.get(cat, "adm_back_menu")
             
@@ -1995,6 +2227,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         elif data == "adm_reset_db_yes":
             execute_query("DELETE FROM users")
             execute_query("DELETE FROM workers")
+            execute_query("DELETE FROM worker_crafts")
             execute_query("DELETE FROM department_additions")
             keyboard = [[InlineKeyboardButton("🔙 العودة للوحة التحكم", callback_data="adm_back_menu")]]
             await query.edit_message_text("✅ تم تصفير قاعدة البيانات وحذف جميع البيانات بنجاح.", reply_markup=InlineKeyboardMarkup(keyboard))
@@ -2087,12 +2320,36 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await query.message.reply_text(full_text, parse_mode="Markdown", reply_markup=BACK_WORKERS_BTN, disable_web_page_preview=True)
         return
 
+    if data.startswith("craft_"):
+        craft_id = int(data.replace("craft_", ""))
+        rows, _ = fetch_query("SELECT name FROM worker_crafts WHERE id = %s", (craft_id,))
+        if rows:
+            craft_name = rows[0][0]
+            db_workers_rows, _ = fetch_query("SELECT name, phone FROM workers WHERE craft = %s", (data,))
+            if db_workers_rows:
+                workers_text = ""
+                for row in db_workers_rows:
+                    w_name, w_phone = escape_markdown(row[0]), escape_markdown(row[1])
+                    workers_text += f"\n• 🛠️ {w_name}\n  📞 رقم التواصل: {w_phone}\n"
+            else:
+                workers_text = "\n⚠️ لا يوجد فنيين مسجلين في هذا القسم حالياً.\n"
+
+            text_to_send = (
+                f"🛠️ *[{escape_markdown(craft_name)}]*\n"
+                f"----------------------------------------\n"
+                f"{workers_text}\n"
+                f"----------------------------------------\n"
+                f"🤖 للبوت والخدمات: t.me/AlBalashon\\_services\\_bot"
+            )
+            await query.message.reply_text(text_to_send, parse_mode="Markdown", reply_markup=BACK_WORKERS_BTN, disable_web_page_preview=True)
+        return
+
     if data == "back_doctors":
         await query.message.edit_text(DOCTORS_TEXT, parse_mode="Markdown", reply_markup=DOCTORS_MARKUP)
         return
 
     if data == "back_workers":
-        await query.message.edit_text(WORKERS_TEXT, parse_mode="Markdown", reply_markup=WORKERS_MARKUP)
+        await query.message.edit_text(WORKERS_TEXT, parse_mode="Markdown", reply_markup=get_workers_markup())
         return
 
     admin_msg = query.message
@@ -2152,7 +2409,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         user_id = parts[-1]
         action = "_".join(parts[1:-1])
         contact_url = f"tg://user?id={user_id}"
-        is_direct_addition = action in ["add_worker", "add_doctor", "add_brand", "add_restaurant", "add_captain", "add_teacher"]
+        is_direct_addition = action in ["add_worker", "add_doctor", "add_brand", "add_restaurant", "add_captain", "add_teacher", "add_tuktuk"]
 
         markup = None
         if action == "sos":
@@ -2187,6 +2444,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         elif action == "add_captain":
             markup = InlineKeyboardMarkup([[InlineKeyboardButton("تواصل مع الكابتن 📞", url=contact_url)]])
             text_to_send = f"🛵 *كابتن توصيل جديد بالبلاشون*\n\n{details}\n\n🤖 للتواصل عبر البوت: t.me/AlBalashon\\_services\\_bot"
+        elif action == "add_tuktuk":
+            markup = InlineKeyboardMarkup([[InlineKeyboardButton("تواصل مع صاحب التوكتوك 📞", url=contact_url)]])
+            text_to_send = f"🛺 *توكتوك جديد بالبلاشون*\n\n{details}\n\n🤖 للتواصل عبر البوت: t.me/AlBalashon\\_services\\_bot"
         else:
             return
 
@@ -2212,7 +2472,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     cat_map = {
                         "add_brand": "brand",
                         "add_restaurant": "restaurant",
-                        "add_captain": "captain"
+                        "add_captain": "captain",
+                        "add_tuktuk": "tuktuk"
                     }
                     if action in cat_map:
                         execute_query("INSERT INTO department_additions (category, details) VALUES (%s, %s)", (cat_map[action], details))
@@ -2274,6 +2535,8 @@ async def admin_menu_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         [InlineKeyboardButton("🏷️ إدارة البراندات والمنتجات", callback_data="adm_manage_brands")],
         [InlineKeyboardButton("🍔 إدارة المطاعم والأكلات", callback_data="adm_manage_restaurants")],
         [InlineKeyboardButton("🛵 إدارة كباتن التوصيل", callback_data="adm_manage_captains")],
+        [InlineKeyboardButton("🛺 إدارة التوكتوك", callback_data="adm_manage_tuktuk")],
+        [InlineKeyboardButton("🌐 إدارة خدمات أونلاين", callback_data="adm_manage_online_services")],
         [InlineKeyboardButton("👤 إدارة المستخدمين والأمان", callback_data="adm_manage_users_security")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -2323,7 +2586,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await status.edit_text(f"✅ أُرسلت لـ {sent} مستخدم.\n❌ فشل لـ {failed} مستخدم.")
 
 async def check_and_send_azkar(application: Application):
-    """Check current time (UTC+3 timezone) and send morning (5 AM) or evening (8 PM) azkar if due."""
+    """Check current time (UTC+3 timezone) and send morning (5 AM) or evening (5 PM) azkar if due."""
     tz = datetime.timezone(datetime.timedelta(hours=3))
     now = datetime.datetime.now(tz)
     today_str = str(now.date())
@@ -2339,8 +2602,8 @@ async def check_and_send_azkar(application: Application):
             except Exception as e:
                 logger.error("Failed to send morning azkar: %s", e)
 
-    # Evening Azkar: 8:00 PM (20:00)
-    if now.hour >= 20:
+    # Evening Azkar: 5:00 PM (17:00)
+    if now.hour >= 17:
         last_evening = application.bot_data.get("last_evening_date")
         if last_evening != today_str:
             application.bot_data["last_evening_date"] = today_str
