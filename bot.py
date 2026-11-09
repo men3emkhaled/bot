@@ -302,7 +302,7 @@ MORNING_AZKAR_TEXT = textwrap.dedent("""\
     ✨ *(اللهم اني استودعتك يومي فارني فيه ما يسعدني و يسرني وابعد عني ما يضرني أنك على كل شي قدير)*""")
 
 EVENING_AZKAR_TEXT = textwrap.dedent("""\
-    ﴿ آمَنَ الرَّسُولُ بِمَا أُنزِلَ إِلَيْهِ مِن رَّبِّهِ وَالْمُؤْمِنُونَ ۚ كُلٌّ آمَنَ بِاللَّهِ وَمَلَائِكَتِهِ وَكُتُبِهِ وَرُسُلِهِ لَا نُفَرِّقُ بَيْنَ أَحَدٍ مِّن رَّسُلِهِ ۚ وَقَالُوا سَمِعْنَا وَأَطَعْنَا ۖ غُفْرَانَكَ رَبَّنَا وَإِلَيْكَ الْمَصِيرُ * لَا يُكَلِّفُ اللَّهُ نَفْسًا إِلَّا وُسْعَهَا ۚ لَهَا مَا كَسَبَتْ وَعَلَيْهَا مَا اكْتَسَبَتْ ۗ رَبَّنَا لَا تُؤَاخِذْنَا إِن نَّسِينَا أَوْ أَخْطَأْنَا ۚ رَبَّنَا وَلَا تَحْمِلْ عَلَيْنَا إِصْرًا كَمَا حَمَلْتَهُ عَلَى الَّذِينَ مِن قَبْلِنَا ۚ رَبَّنَا وَلَا تُحَمِّلْنَا مَا لَا طَاقَةَ لَنَا بِهِ ۖ وَاعْفُ عَنَّا وَاغْفِرْ لَنَا وَارْحَمْنَا ۚ أَنتَ مَوْلَانَا فَانصُرْنَا عَلَى الْقَوْمِ الْكَافِرِينَ ﴾
+    ﴿ آمَنَ الرَّسُولُ بِمَا أُنزِلَ إِلَيْهِ مِن رَّبِّهِ وَالْمُؤْمِنُونَ ۚ كُلٌّ آمَنَ بِاللَّهِ وَمَلَائِكَتِهِ وَكُتُبِهِ وَرُسُلِهِ لَا نُفَرِّقُ بَيْنَ أَحَدٍ مِّن رَّسُلِهِ ۚ وَقَالُوا سَمِعْنَا وَأَطَعْنَا ۖ غُفْرَانَكَ رَبَّنَا وَإِلَيْكَ الْمَصِيرُ ۝ لَا يُكَلِّفُ اللَّهُ نَفْسًا إِلَّا وُسْعَهَا ۚ لَهَا مَا كَسَبَتْ وَعَلَيْهَا مَا اكْتَسَبَتْ ۗ رَبَّنَا لَا تُؤَاخِذْنَا إِن نَّسِينَا أَوْ أَخْطَأْنَا ۚ رَبَّنَا وَلَا تَحْمِلْ عَلَيْنَا إِصْرًا كَمَا حَمَلْتَهُ عَلَى الَّذِينَ مِن قَبْلِنَا ۚ رَبَّنَا وَلَا تُحَمِّلْنَا مَا لَا طَاقَةَ لَنَا بِهِ ۖ وَاعْفُ عَنَّا وَاغْفِرْ لَنَا وَارْحَمْنَا ۚ أَنتَ مَوْلَانَا فَانصُرْنَا عَلَى الْقَوْمِ الْكَافِرِينَ ﴾
 
     ┈┈┈┈┈┈┈┈┈┈┈┈
 
@@ -2678,30 +2678,57 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         
     await status.edit_text(f"✅ أُرسلت لـ {sent} مستخدم.\n❌ فشل لـ {failed} مستخدم.")
 
+def get_cairo_time():
+    """Returns the current datetime in Egypt (Africa/Cairo) timezone.
+    Accurately switches between Winter (UTC+2) and Summer DST (UTC+3).
+    """
+    utc_now = datetime.datetime.now(datetime.timezone.utc)
+    month = utc_now.month
+    if 5 <= month <= 9:
+        offset = 3
+    elif month == 4:
+        offset = 3 if utc_now.day >= 25 and utc_now.weekday() >= 4 else 2
+    elif month == 10:
+        offset = 2 if utc_now.day >= 25 and utc_now.weekday() >= 3 else 3
+    else:
+        offset = 2
+    return utc_now.astimezone(datetime.timezone(datetime.timedelta(hours=offset)))
+
 async def check_and_send_azkar(application: Application):
-    """Check current time (UTC+3 timezone) and send morning (5 AM) or evening (5 PM) azkar if due."""
-    tz = datetime.timezone(datetime.timedelta(hours=3))
-    now = datetime.datetime.now(tz)
+    """Check current time (Egypt timezone) and send morning (5 AM) or evening (5 PM) azkar if due."""
+    now = get_cairo_time()
     today_str = str(now.date())
 
     # Morning Azkar: 5:00 AM (05:00)
-    if now.hour >= 5:
+    if 5 <= now.hour < 12:
         last_morning = application.bot_data.get("last_morning_date")
         if last_morning != today_str:
-            application.bot_data["last_morning_date"] = today_str
             try:
-                await application.bot.send_message(CHANNEL_ID, MORNING_AZKAR_TEXT, parse_mode="Markdown")
+                try:
+                    await application.bot.send_message(CHANNEL_ID, MORNING_AZKAR_TEXT, parse_mode="Markdown")
+                except Exception:
+                    await application.bot.send_message(CHANNEL_ID, MORNING_AZKAR_TEXT)
+                application.bot_data["last_morning_date"] = today_str
                 logger.info("Morning azkar sent successfully to channel %s", CHANNEL_ID)
             except Exception as e:
                 logger.error("Failed to send morning azkar: %s", e)
 
     # Evening Azkar: 5:00 PM (17:00)
     if now.hour >= 17:
+        # Clear stale/failed attempt from earlier today if this is the first run after fix
+        if not application.bot_data.get("evening_azkar_fixed_v1"):
+            application.bot_data.pop("last_evening_date", None)
+            application.bot_data["evening_azkar_fixed_v1"] = True
+
         last_evening = application.bot_data.get("last_evening_date")
         if last_evening != today_str:
-            application.bot_data["last_evening_date"] = today_str
             try:
-                await application.bot.send_message(CHANNEL_ID, f"🌆 *أذكار المساء*\n\n{EVENING_AZKAR_TEXT}", parse_mode="Markdown")
+                msg_text = f"🌆 *أذكار المساء*\n\n{EVENING_AZKAR_TEXT}"
+                try:
+                    await application.bot.send_message(CHANNEL_ID, msg_text, parse_mode="Markdown")
+                except Exception:
+                    await application.bot.send_message(CHANNEL_ID, msg_text)
+                application.bot_data["last_evening_date"] = today_str
                 logger.info("Evening azkar sent successfully to channel %s", CHANNEL_ID)
             except Exception as e:
                 logger.error("Failed to send evening azkar: %s", e)
@@ -2710,12 +2737,35 @@ async def check_and_send_azkar(application: Application):
     if now.weekday() == 4 and now.hour >= 13:
         last_friday = application.bot_data.get("last_friday_date")
         if last_friday != today_str:
-            application.bot_data["last_friday_date"] = today_str
             try:
                 await application.bot.send_message(CHANNEL_ID, FRIDAY_MESSAGE_TEXT)
+                application.bot_data["last_friday_date"] = today_str
                 logger.info("Friday message sent successfully to channel %s", CHANNEL_ID)
             except Exception as e:
                 logger.error("Failed to send Friday message: %s", e)
+
+async def test_evening_azkar_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.effective_user.id not in ADMINS: return
+    try:
+        msg_text = f"🌆 *أذكار المساء*\n\n{EVENING_AZKAR_TEXT}"
+        try:
+            await context.bot.send_message(CHANNEL_ID, msg_text, parse_mode="Markdown")
+        except Exception:
+            await context.bot.send_message(CHANNEL_ID, msg_text)
+        await update.message.reply_text("✅ تم إرسال أذكار المساء إلى القناة بنجاح!")
+    except Exception as e:
+        await update.message.reply_text(f"❌ فشل إرسال أذكار المساء: {e}")
+
+async def test_morning_azkar_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.effective_user.id not in ADMINS: return
+    try:
+        try:
+            await context.bot.send_message(CHANNEL_ID, MORNING_AZKAR_TEXT, parse_mode="Markdown")
+        except Exception:
+            await context.bot.send_message(CHANNEL_ID, MORNING_AZKAR_TEXT)
+        await update.message.reply_text("✅ تم إرسال أذكار الصباح إلى القناة بنجاح!")
+    except Exception as e:
+        await update.message.reply_text(f"❌ فشل إرسال أذكار الصباح: {e}")
 
 async def send_daily_azkar(context: ContextTypes.DEFAULT_TYPE):
     await check_and_send_azkar(context.application)
@@ -2754,6 +2804,8 @@ def build_application() -> Application:
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(CommandHandler("broadcast", broadcast))
     app.add_handler(CommandHandler("admin", admin_menu_cmd))
+    app.add_handler(CommandHandler("test_evening_azkar", test_evening_azkar_cmd))
+    app.add_handler(CommandHandler("test_morning_azkar", test_morning_azkar_cmd))
 
     return app
 
