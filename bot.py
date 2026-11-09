@@ -770,49 +770,100 @@ def _put_pg_conn(conn, broken=False):
         p.putconn(conn, close=broken)
 
 def execute_query(query_str, params=None):
-    """Executes an INSERT/UPDATE/DELETE on PostgreSQL."""
-    pg_success = False
+    """Executes an INSERT/UPDATE/DELETE on PostgreSQL with auto-reconnect retry."""
     conn = None
+    use_pool = True
     try:
         conn = _get_pg_conn()
+        if not conn or getattr(conn, "closed", 0) != 0:
+            use_pool = False
+            conn = psycopg2.connect(POSTGRES_URL)
+        cursor = conn.cursor()
+        cursor.execute(query_str, params or ())
+        conn.commit()
+        if use_pool:
+            _put_pg_conn(conn)
+        else:
+            conn.close()
+        return True
+    except Exception as e:
+        logger.warning(f"execute_query attempt 1 failed: {e}. Retrying with fresh connection...")
         if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            if use_pool:
+                _put_pg_conn(conn, broken=True)
+            else:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+        # Retry with fresh direct connection
+        try:
+            conn = psycopg2.connect(POSTGRES_URL)
             cursor = conn.cursor()
             cursor.execute(query_str, params or ())
             conn.commit()
+            conn.close()
+            return True
+        except Exception as e2:
+            logger.error(f"execute_query retry failed: {e2}")
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            return False
+
+def fetch_query(query_str, params=None):
+    """Fetches rows from PostgreSQL with auto-reconnect retry."""
+    conn = None
+    use_pool = True
+    try:
+        conn = _get_pg_conn()
+        if not conn or getattr(conn, "closed", 0) != 0:
+            use_pool = False
+            conn = psycopg2.connect(POSTGRES_URL)
+        cursor = conn.cursor()
+        cursor.execute(query_str, params or ())
+        rows = cursor.fetchall()
+        if use_pool:
             _put_pg_conn(conn)
-            pg_success = True
+        else:
+            conn.close()
+        return rows, True
     except Exception as e:
-        logger.error(f"PostgreSQL execute error: {e}")
+        logger.warning(f"fetch_query attempt 1 failed: {e}. Retrying with fresh connection...")
         if conn:
             try:
                 conn.rollback()
             except Exception:
                 pass
-            _put_pg_conn(conn, broken=True)
-
-    return pg_success
-
-def fetch_query(query_str, params=None):
-    """Fetches rows from PostgreSQL."""
-    conn = None
-    try:
-        conn = _get_pg_conn()
-        if conn:
+            if use_pool:
+                _put_pg_conn(conn, broken=True)
+            else:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+        # Retry with fresh direct connection
+        try:
+            conn = psycopg2.connect(POSTGRES_URL)
             cursor = conn.cursor()
             cursor.execute(query_str, params or ())
             rows = cursor.fetchall()
-            _put_pg_conn(conn)
+            conn.close()
             return rows, True
-    except Exception as e:
-        logger.error(f"PostgreSQL fetch error, falling back to SQLite: {e}")
-        if conn:
-            try:
-                conn.rollback()
-            except Exception:
-                pass
-            _put_pg_conn(conn, broken=True)
-
-    return [], False
+        except Exception as e2:
+            logger.error(f"fetch_query retry failed: {e2}")
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            return [], False
 
 def init_db():
     """Create persistent PostgreSQL tables. Vercel has no durable local filesystem."""
@@ -822,22 +873,40 @@ def init_db():
     try:
         pg_conn = psycopg2.connect(POSTGRES_URL)
         cursor = pg_conn.cursor()
-        cursor.execute("CREATE TABLE IF NOT EXISTS users (user_id BIGINT PRIMARY KEY, joined_at VARCHAR(100), last_seen VARCHAR(100))")
-        cursor.execute("CREATE TABLE IF NOT EXISTS workers (id SERIAL PRIMARY KEY, name VARCHAR(255), craft VARCHAR(255), phone VARCHAR(100))")
-        cursor.execute("CREATE TABLE IF NOT EXISTS worker_crafts (id SERIAL PRIMARY KEY, name VARCHAR(255) UNIQUE)")
-        cursor.execute("CREATE TABLE IF NOT EXISTS department_additions (id SERIAL PRIMARY KEY, category VARCHAR(50), details TEXT)")
-        cursor.execute("CREATE TABLE IF NOT EXISTS lesson_categories (id SERIAL PRIMARY KEY, name VARCHAR(255) UNIQUE)")
-        cursor.execute("SELECT COUNT(*) FROM lesson_categories")
-        if cursor.fetchone()[0] == 0:
-            for cat in ["علوم متكاملة", "عربي", "انجليزي", "رياضة"]:
-                cursor.execute("INSERT INTO lesson_categories (name) VALUES (%s) ON CONFLICT DO NOTHING", (cat,))
-        pg_conn.commit()
+        tables = [
+            "CREATE TABLE IF NOT EXISTS users (user_id BIGINT PRIMARY KEY, joined_at VARCHAR(100), last_seen VARCHAR(100))",
+            "CREATE TABLE IF NOT EXISTS workers (id SERIAL PRIMARY KEY, name VARCHAR(255), craft VARCHAR(255), phone VARCHAR(100))",
+            "CREATE TABLE IF NOT EXISTS worker_crafts (id SERIAL PRIMARY KEY, name VARCHAR(255) UNIQUE)",
+            "CREATE TABLE IF NOT EXISTS department_additions (id SERIAL PRIMARY KEY, category VARCHAR(50), details TEXT)",
+            "CREATE TABLE IF NOT EXISTS lesson_categories (id SERIAL PRIMARY KEY, name VARCHAR(255) UNIQUE)",
+        ]
+        for tbl_sql in tables:
+            try:
+                cursor.execute(tbl_sql)
+                pg_conn.commit()
+            except Exception as te:
+                logger.error(f"Error creating table: {te}")
+                pg_conn.rollback()
+
+        try:
+            cursor.execute("SELECT COUNT(*) FROM lesson_categories")
+            if cursor.fetchone()[0] == 0:
+                for cat in ["علوم متكاملة", "عربي", "انجليزي", "رياضة"]:
+                    cursor.execute("INSERT INTO lesson_categories (name) VALUES (%s) ON CONFLICT DO NOTHING", (cat,))
+                pg_conn.commit()
+        except Exception as le:
+            logger.error(f"Error checking lesson categories: {le}")
+            pg_conn.rollback()
+
         logger.info("PostgreSQL database initialized successfully.")
     except Exception as e:
         logger.error(f"PostgreSQL initialization failed: {e}")
     finally:
         if pg_conn:
-            pg_conn.close()
+            try:
+                pg_conn.close()
+            except Exception:
+                pass
 
 def update_activity(user_id: int):
     today = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=3))).date().isoformat()
@@ -1053,6 +1122,14 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         
         if action == "admin_add_craft_name":
             craft_name = text.strip()
+            if "الحرفة" in craft_name and ":" in craft_name:
+                craft_name = craft_name.split(":")[-1].strip()
+            elif "اسم الحرفة" in craft_name:
+                craft_name = craft_name.replace("اسم الحرفة", "").replace(":", "").strip()
+            elif "الحرفة" in craft_name:
+                craft_name = craft_name.replace("الحرفة", "").replace(":", "").strip()
+            
+            craft_name = craft_name.strip()
             if craft_name:
                 execute_query("INSERT INTO worker_crafts (name) VALUES (%s) ON CONFLICT DO NOTHING", (craft_name,))
                 rows, _ = fetch_query("SELECT id FROM worker_crafts WHERE name = %s", (craft_name,))
@@ -1062,7 +1139,8 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
                     keyboard.append([InlineKeyboardButton("➕ إضافة بيانات صنايعي لهذه الحرفة الآن", callback_data=f"adm_add_wcraft_craft_{craft_id}")])
                 keyboard.append([InlineKeyboardButton("🔙 رجوع لإدارة الصنايعية", callback_data="adm_manage_workers")])
                 await update.message.reply_text(
-                    f"✅ تم إضافة حرفة *{craft_name}* بنجاح كقسم جديد بجانب الأقسام الحالية.",
+                    f"✅ تم إضافة حرفة *{craft_name}* بنجاح كقسم جديد بجانب الأقسام الحالية (مثل نجار وصيانة غسالات).\n"
+                    "ستظهر الحرفة الآن في دليل الصنايعية ولوحة الإدارة.",
                     parse_mode="Markdown",
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
@@ -1444,6 +1522,14 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 # ════════════════════════════════════════════
 async def process_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.effective_user.id
+
+    # ── Admin action takes top priority ──────────────────────────────────────
+    # If an admin clicked an inline admin button and is in the middle of entering
+    # details (craft name, worker info, tuktuk/restaurant/online addition, etc.),
+    # immediately delegate to handle_choice regardless of conversation state.
+    if user_id in ADMINS and "admin_action" in context.user_data:
+        return await handle_choice(update, context)
+
     if not await check_subscription(user_id, context.bot):
         await prompt_subscription(update, context)
         return ConversationHandler.END
@@ -1468,6 +1554,7 @@ async def process_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
              "🚗 سيارات الطوارئ والمشاوير", "براند 🏷️", "براند", "🔙 رجوع للخدمات",
              "إضافة شغلك ➕", "إضافة شغلك", "إضافة طبيب/عيادة 🩺",
              "إضافة صنايعي 🛠️", "إضافة براند 🏷️", "إضافة مطعم 🍔", "إضافة كابتن توصيل 🛵",
+             "إضافة توكتوك 🛺", "إضافة توكتوك",
              "إضافة مدرس 📚", "إضافة مدرس"]
              
     if user_text in KNOWN:
@@ -2531,6 +2618,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 # ════════════════════════════════════════════
 async def admin_menu_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_user.id not in ADMINS: return
+    context.user_data.pop("choice", None)
+    context.user_data.pop("admin_action", None)
     
     keyboard = [
         [InlineKeyboardButton("🛠️ إدارة الفنيين (الصنايعية)", callback_data="adm_manage_workers")],
