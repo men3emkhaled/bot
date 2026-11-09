@@ -1044,23 +1044,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.effective_user.id
     text = update.message.text or ""
-    
-    # Redirect to process_input if they are in an active addition flow
-    interrupts = [
-        "🚨 حالات عاجلة", "إضافة شغلك ➕", "self care ✨",
-        "💼 وظائف خالية", "🛠️ الخدمات", "🛠 الخدمات", "🩺 دليل الأطباء والعيادات",
-        "الجمعية الشرعية 🏛️", "🛺 التوكتووووك", "التوكتووووك", "توكتوك", "🌐 خدمات أونلاين", "خدمات أونلاين", "خدمات اونلاين",
-        "🔙 رجوع للقائمة الرئيسية", "🔙 رجوع للخدمات",
-        "براند 🏷️", "براند", "🍔 مطاعم", "دليل الصنايعية 🛠️",
-        "مكتبة الوفاء 📚", "مكتب السعد للمحاسبة والمراجعة ⚖️",
-        "📦 خدمات الشحن والتوصيل (الطيارين)",
-        "🪟 معرض استار ميتال للألوميتال",
-        "🤝 طلب مساعدة", "🏟️ حجز ملعب البلاشون",
-        "🚗 سيارات الطوارئ والمشاوير",
-    ]
-    if "choice" in context.user_data and context.user_data["choice"].startswith("إضافة") and text not in interrupts:
-        return await process_input(update, context)
 
+    # ── Admin action takes top priority ──────────────────────────────────────
+    # Must run BEFORE the process_input redirect so a stale "choice" key in
+    # user_data never swallows the admin's reply to an inline-button prompt.
     if user_id in ADMINS and "admin_action" in context.user_data:
         action = context.user_data.pop("admin_action")
         
@@ -1194,6 +1181,23 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             except Exception as e:
                 await update.message.reply_text(f"❌ حدث خطأ أثناء الحذف: {e}")
             return ConversationHandler.END
+
+    # ── Redirect to process_input if in an active addition flow ──────────────
+    interrupts = [
+        "🚨 حالات عاجلة", "إضافة شغلك ➕", "self care ✨",
+        "💼 وظائف خالية", "🛠️ الخدمات", "🛠 الخدمات", "🩺 دليل الأطباء والعيادات",
+        "الجمعية الشرعية 🏛️", "🛺 التوكتووووك", "التوكتووووك", "توكتوك",
+        "🌐 خدمات أونلاين", "خدمات أونلاين", "خدمات اونلاين",
+        "🔙 رجوع للقائمة الرئيسية", "🔙 رجوع للخدمات",
+        "براند 🏷️", "براند", "🍔 مطاعم", "دليل الصنايعية 🛠️",
+        "مكتبة الوفاء 📚", "مكتب السعد للمحاسبة والمراجعة ⚖️",
+        "📦 خدمات الشحن والتوصيل (الطيارين)",
+        "🪟 معرض استار ميتال للألوميتال",
+        "🤝 طلب مساعدة", "🏟️ حجز ملعب البلاشون",
+        "🚗 سيارات الطوارئ والمشاوير",
+    ]
+    if "choice" in context.user_data and context.user_data["choice"].startswith("إضافة") and text not in interrupts:
+        return await process_input(update, context)
 
     if not await check_subscription(user_id, context.bot):
         await prompt_subscription(update, context)
