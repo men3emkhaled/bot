@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.git
+.github
+.vscode
+.gemini
+.antigravity
+.cursorrules
+CLAUDE.md
+GEMINI.md
+*.db
+*.db-journal
+*.pickle
+.env
