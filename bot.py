@@ -2734,34 +2734,6 @@ async def check_and_send_azkar(application: Application):
             except Exception as e:
                 logger.error("Failed to send evening azkar: %s", e)
 
-    # Friday Reminder: Every Friday at 1:00 PM (13:00) - Sent to bot users in private
-    if now.weekday() == 4 and now.hour >= 13:
-        last_friday = application.bot_data.get("last_friday_date")
-        if last_friday != today_str:
-            application.bot_data["last_friday_date"] = today_str
-            try:
-                users = get_all_user_ids()
-                sent_count = 0
-                for uid in users:
-                    try:
-                        await application.bot.send_message(uid, FRIDAY_MESSAGE_TEXT)
-                        sent_count += 1
-                    except RetryAfter as e:
-                        await asyncio.sleep(e.retry_after)
-                        try:
-                            await application.bot.send_message(uid, FRIDAY_MESSAGE_TEXT)
-                            sent_count += 1
-                        except Exception:
-                            pass
-                    except (Forbidden, BadRequest):
-                        pass
-                    except Exception as e:
-                        logger.debug("Failed to send Friday message to user %s: %s", uid, e)
-                    await asyncio.sleep(0.05)
-                logger.info("Friday message sent successfully to %d users (out of %d)", sent_count, len(users))
-            except Exception as e:
-                logger.error("Failed to execute Friday broadcast: %s", e)
-
 async def test_friday_reminder_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_user.id not in ADMINS: return
     try:
