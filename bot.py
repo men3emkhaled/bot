@@ -2782,6 +2782,9 @@ async def test_friday_reminder_cmd(update: Update, context: ContextTypes.DEFAULT
             except Exception:
                 failed += 1
             await asyncio.sleep(0.05)
+        now = get_cairo_time()
+        if now.weekday() == 4:
+            context.application.bot_data["last_friday_date"] = str(now.date())
         await status.edit_text(f"✅ تم إنهاء إرسال تذكير الجمعة:\n- أُرسلت بنجاح: {sent} مستخدم\n- تعذر الإرسال: {failed} مستخدم (حظروا البوت أو حذفوا الحساب).")
     except Exception as e:
         await update.message.reply_text(f"❌ خطأ أثناء إرسال تذكير الجمعة: {e}")
