@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 logger = logging.getLogger(__name__)
 
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import Forbidden, BadRequest, RetryAfter
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -2733,16 +2734,57 @@ async def check_and_send_azkar(application: Application):
             except Exception as e:
                 logger.error("Failed to send evening azkar: %s", e)
 
-    # Friday Reminder: Every Friday at 1:00 PM (13:00)
+    # Friday Reminder: Every Friday at 1:00 PM (13:00) - Sent to bot users in private
     if now.weekday() == 4 and now.hour >= 13:
         last_friday = application.bot_data.get("last_friday_date")
         if last_friday != today_str:
+            application.bot_data["last_friday_date"] = today_str
             try:
-                await application.bot.send_message(CHANNEL_ID, FRIDAY_MESSAGE_TEXT)
-                application.bot_data["last_friday_date"] = today_str
-                logger.info("Friday message sent successfully to channel %s", CHANNEL_ID)
+                users = get_all_user_ids()
+                sent_count = 0
+                for uid in users:
+                    try:
+                        await application.bot.send_message(uid, FRIDAY_MESSAGE_TEXT)
+                        sent_count += 1
+                    except RetryAfter as e:
+                        await asyncio.sleep(e.retry_after)
+                        try:
+                            await application.bot.send_message(uid, FRIDAY_MESSAGE_TEXT)
+                            sent_count += 1
+                        except Exception:
+                            pass
+                    except (Forbidden, BadRequest):
+                        pass
+                    except Exception as e:
+                        logger.debug("Failed to send Friday message to user %s: %s", uid, e)
+                    await asyncio.sleep(0.05)
+                logger.info("Friday message sent successfully to %d users (out of %d)", sent_count, len(users))
             except Exception as e:
-                logger.error("Failed to send Friday message: %s", e)
+                logger.error("Failed to execute Friday broadcast: %s", e)
+
+async def test_friday_reminder_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.effective_user.id not in ADMINS: return
+    try:
+        users = get_all_user_ids()
+        sent = failed = 0
+        status = await update.message.reply_text(f"📤 جاري إرسال تذكير الجمعة لـ {len(users)} مستخدم في الخاص...")
+        for uid in users:
+            try:
+                await context.bot.send_message(uid, FRIDAY_MESSAGE_TEXT)
+                sent += 1
+            except RetryAfter as e:
+                await asyncio.sleep(e.retry_after)
+                try:
+                    await context.bot.send_message(uid, FRIDAY_MESSAGE_TEXT)
+                    sent += 1
+                except Exception:
+                    failed += 1
+            except Exception:
+                failed += 1
+            await asyncio.sleep(0.05)
+        await status.edit_text(f"✅ تم إنهاء إرسال تذكير الجمعة:\n- أُرسلت بنجاح: {sent} مستخدم\n- تعذر الإرسال: {failed} مستخدم (حظروا البوت أو حذفوا الحساب).")
+    except Exception as e:
+        await update.message.reply_text(f"❌ خطأ أثناء إرسال تذكير الجمعة: {e}")
 
 async def test_evening_azkar_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_user.id not in ADMINS: return
@@ -2806,6 +2848,7 @@ def build_application() -> Application:
     app.add_handler(CommandHandler("admin", admin_menu_cmd))
     app.add_handler(CommandHandler("test_evening_azkar", test_evening_azkar_cmd))
     app.add_handler(CommandHandler("test_morning_azkar", test_morning_azkar_cmd))
+    app.add_handler(CommandHandler("test_friday_reminder", test_friday_reminder_cmd))
 
     return app
 
